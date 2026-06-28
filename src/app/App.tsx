@@ -32,6 +32,46 @@ import {
   EyeOff,
 } from "lucide-react";
 
+// ─── Razorpay global TypeScript declarations ──────────────────────────────
+
+interface RazorpaySuccessResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id?: string;
+  razorpay_signature?: string;
+}
+
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description?: string;
+  image?: string;
+  handler: (response: RazorpaySuccessResponse) => void;
+  prefill?: { name?: string; email?: string; contact?: string };
+  notes?: Record<string, string>;
+  theme?: { color: string };
+  modal?: { backdropclose?: boolean; escape?: boolean };
+}
+
+interface RazorpayInstance {
+  open(): void;
+}
+
+declare global {
+  interface Window {
+    Razorpay: new (options: RazorpayOptions) => RazorpayInstance;
+  }
+}
+
+// Vite env type extension for VITE_RAZORPAY_KEY_ID
+interface ImportMetaEnv {
+  readonly VITE_RAZORPAY_KEY_ID: string;
+}
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
 // ─── Layout constants ─────────────────────────────────────────────────────
 // AnnouncementBar: h-8 (32px) mobile, sm:h-9 (36px)
 // Navbar:          h-16 (64px) mobile, sm:h-20 (80px)
@@ -122,6 +162,7 @@ function useAuth(): AuthContextType {
 
 const BUNDLE_PRICE = 999;
 const SALE_PRICE = 799;
+const DELIVERY_FEE = 70;
 
 interface BundlePricing {
   lineSubtotal: number;
@@ -168,23 +209,23 @@ const PRODUCTS: Product[] = [
     mrpPrice: 1199,
     salePrice: 799,
     description:
-      "A surge of coastal power — bergamot and sea salt crash over a driftwood heart before settling into warm ambergris. Designed for those who move with the force of the ocean and leave a trail that lingers like the tide.",
+      "A crisp, electric fusion of Bergamot, Lavender, and Cedarwood. Ocean Rush is a high-persistence apparel perfume designed to bond with fabric fibers for a powerful, sophisticated aura that lasts. Fresh and commanding.",
     main_image_url:
-      "https://images.unsplash.com/photo-1627468030538-06a962182a88?w=800&h=1000&fit=crop&auto=format",
+      "https://i.postimg.cc/5y5wKm3G/OCEAN-RUSH-s.jpg",
     secondary_image_url:
-      "https://images.unsplash.com/photo-1571129163925-84289ec292d1?w=800&h=1000&fit=crop&auto=format",
+      "https://i.postimg.cc/RhHNg17M/aura-element-ocean-rush-perfume-model-lifestyle-jpg-png.jpg",
     gallery: [
-      "https://images.unsplash.com/photo-1627468030538-06a962182a88?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1571129163925-84289ec292d1?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1674469296659-adfe02dba6a1?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1585142607427-f142c1e786cb?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1627823569857-4d8581dc62b2?w=900&h=1100&fit=crop&auto=format",
+      "https://i.postimg.cc/5y5wKm3G/OCEAN-RUSH-s.jpg",
+      "https://i.postimg.cc/kGbBTNQg/aura-element-ocean-rush-scent-script-story-jpg.jpg",
+      "https://i.postimg.cc/Wzkh5mG4/aura-element-ocean-rush-fragrance-profile-notes-jpg.jpg",
+      "https://i.postimg.cc/VvCdK9q6/aura-element-ocean-rush-perfume-ingredients-breakdown-jpg.jpg",
+      "https://i.postimg.cc/RhHNg17M/aura-element-ocean-rush-perfume-model-lifestyle-jpg-png.jpg",
     ],
     concentration: 25,
     notes: {
-      top: ["Sea Salt", "Bergamot", "Marine Accord"],
-      heart: ["Driftwood", "Aquatic Iris", "Cardamom"],
-      base: ["Ambergris", "Sandalwood", "White Musk"],
+      top: ["Lavender", "Bergamot", "Pink Pepper"],
+      heart: ["Violet Leaf", "Water Lily", "Jasmine"],
+      base: ["Musk", "Cedar", "Moss"],
     },
     volume: "50ml",
   },
@@ -196,23 +237,23 @@ const PRODUCTS: Product[] = [
     mrpPrice: 1199,
     salePrice: 799,
     description:
-      "The scent of charged air before lightning strikes. Black pepper and smoky incense ignite over a smouldering oud core — bold, primal, and impossible to ignore. For those who own every room they enter.",
+      "An intense, aromatic woody fusion with a fresh spicy bite. A bold apparel perfume engineered for maximum sillage and raw energy on fabric.",
     main_image_url:
-      "https://images.unsplash.com/photo-1624811742200-69166e7b7bcc?w=800&h=1000&fit=crop&auto=format",
+      "https://i.postimg.cc/G2BPG5p0/aura-element-primal-storm-luxury-fragrance-bottle-jpg.jpg",
     secondary_image_url:
-      "https://images.unsplash.com/photo-1598634222670-87c5f558119c?w=800&h=1000&fit=crop&auto=format",
+      "https://i.postimg.cc/wB4ctp9q/aura-element-primal-storm-perfume-model-lifestyle-jpg-png.jpg",
     gallery: [
-      "https://images.unsplash.com/photo-1624811742200-69166e7b7bcc?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1598634222670-87c5f558119c?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1674469295330-7a4d6f090f77?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1654617058572-f1f473581778?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1774682061055-3bfe402e5a12?w=900&h=1100&fit=crop&auto=format",
+      "https://i.postimg.cc/G2BPG5p0/aura-element-primal-storm-luxury-fragrance-bottle-jpg.jpg",
+      "https://i.postimg.cc/W3DmgH4j/aura-element-primal-storm-scent-script-story-jpg.jpg",
+      "https://i.postimg.cc/5tKqHVf2/aura-element-primal-storm-fragrance-profile-notes-jpg.jpg",
+      "https://i.postimg.cc/SK17XhmN/aura-element-primal-storm-perfume-ingredients-breakdown-jpg.jpg",
+      "https://i.postimg.cc/wB4ctp9q/aura-element-primal-storm-perfume-model-lifestyle-jpg-png.jpg",
     ],
     concentration: 25,
     notes: {
-      top: ["Black Pepper", "Grapefruit", "Smoked Aldehydes"],
-      heart: ["Oud Wood", "Dark Rose", "Incense"],
-      base: ["Labdanum", "Vetiver", "Charred Amber"],
+      top: ["Italian Bergamot ", "Pink Perpper", "Lavender"],
+      heart: ["Vetiver Haiti", "Geranium Egypt", "Sichuan Pepper"],
+      base: ["Patchouli", "Cedarwood", "Madagascar"],
     },
     volume: "50ml",
   },
@@ -224,23 +265,23 @@ const PRODUCTS: Product[] = [
     mrpPrice: 1199,
     salePrice: 799,
     description:
-      "A bloom at golden hour — fresh peony meets damask rose on a bed of cashmere musk. Feminine without fragility, romantic without effort. Velvet Blossom is the scent of a woman who has nothing left to prove.",
+      "An elegant, sweet embrace of Pear Blossom, Red Berries, and Italian Mandarin. Velvet Blossom is a high-persistence apparel perfume that leaves a sophisticated, soft, and undeniable trail.",
     main_image_url:
-      "https://images.unsplash.com/photo-1613521140785-e85e427f8002?w=800&h=1000&fit=crop&auto=format",
+      "https://i.postimg.cc/vHvngsvJ/aura-element-velvet-blossom-perfume-for-clothing-bottle-jpg.jpg",
     secondary_image_url:
-      "https://images.unsplash.com/photo-1541108564883-bec8126021f5?w=800&h=1000&fit=crop&auto=format",
+      "https://i.postimg.cc/ZKLNBSct/aura-element-velvet-blossom-perfume-model-lifestyle-jpg-png.jpg",
     gallery: [
-      "https://images.unsplash.com/photo-1613521140785-e85e427f8002?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1595425959632-34f2822322ce?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1615108395437-df128ad79e80?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1630573133526-8d090e0269af?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1541108564883-bec8126021f5?w=900&h=1100&fit=crop&auto=format",
+      "https://i.postimg.cc/vHvngsvJ/aura-element-velvet-blossom-perfume-for-clothing-bottle-jpg.jpg",
+      "https://i.postimg.cc/L861jbCK/aura-element-velvet-blossom-scent-script-story-jpg.jpg",
+      "https://i.postimg.cc/RVTt6BTj/aura-element-velvet-blossom-fragrance-profile-notes-jpg.jpg",
+      "https://i.postimg.cc/rF940k97/aura-element-velvet-blossom-perfume-ingredients-breakdown-jpg.jpg",
+      "https://i.postimg.cc/ZKLNBSct/aura-element-velvet-blossom-perfume-model-lifestyle-jpg-png.jpg",
     ],
     concentration: 25,
     notes: {
-      top: ["Peony", "Lychee", "Pink Pepper"],
-      heart: ["Damask Rose", "Magnolia", "Ylang Ylang"],
-      base: ["Cashmere Musk", "White Amber", "Sandalwood"],
+      top: ["Pear Blossom", "Red Berries", "Italian Mandarin"],
+      heart: ["White Gardenia", "Jasmine Absolute", "Frangipani"],
+      base: ["Brown Sugar", "Patchouli", "Musk"],
     },
     volume: "50ml",
   },
@@ -252,23 +293,23 @@ const PRODUCTS: Product[] = [
     mrpPrice: 1199,
     salePrice: 799,
     description:
-      "The warmth of sun-soaked skin at dusk — mandarin and neroli spark into a heart of tuberose and coconut, settling into vanilla-glazed amber. Effortlessly joyful, radiantly alive. Made for living in full colour.",
+      "A vibrant, tropical escape featuring Passionfruit, Pineapple, and Vanilla Orchid. Rio Glow is an exotic unisex apparel perfume that captures the warmth of a summer sunset. Fresh, fruity, and undeniably radiant.",
     main_image_url:
-      "https://images.unsplash.com/photo-1690790591188-3503c1a4dcb6?w=800&h=1000&fit=crop&auto=format",
+      "https://i.postimg.cc/W12MX34f/aura-element-rio-glow-long-lasting-perfume-bottle-jpg.jpg",
     secondary_image_url:
-      "https://images.unsplash.com/photo-1622618991746-fe6004db3a47?w=800&h=1000&fit=crop&auto=format",
+      "https://i.postimg.cc/nhHv0zLW/aura-element-rio-glow-perfume-model-lifestyle-jpg-png.jpg",
     gallery: [
-      "https://images.unsplash.com/photo-1690790591188-3503c1a4dcb6?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1768025719875-48ed072f3084?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1758871993077-e084cc7eca86?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1622618991746-fe6004db3a47?w=900&h=1100&fit=crop&auto=format",
-      "https://images.unsplash.com/photo-1709095458514-573bc6277d3d?w=900&h=1100&fit=crop&auto=format",
+      "https://i.postimg.cc/W12MX34f/aura-element-rio-glow-long-lasting-perfume-bottle-jpg.jpg",
+      "https://i.postimg.cc/t4Xh2TTb/aura-element-rio-glow-scent-script-story-jpg.jpg",
+      "https://i.postimg.cc/sgVpwX2N/aura-element-rio-glow-fragrance-profile-notes-jpg.jpg",
+      "https://i.postimg.cc/0y8pcQNF/aura-element-rio-glow-perfume-ingredients-breakdown-jpg.jpg",
+      "https://i.postimg.cc/nhHv0zLW/aura-element-rio-glow-perfume-model-lifestyle-jpg-png.jpg",
     ],
     concentration: 25,
     notes: {
-      top: ["Mandarin", "Neroli", "Coconut Water"],
-      heart: ["Tuberose", "Passion Fruit", "Jasmine"],
-      base: ["Vanilla", "Golden Amber", "Tonka Bean"],
+      top: ["Passionfruit", "Grapefruit", "Pineapple"],
+      heart: ["Peony", "Vanilla Orchid", "Jasmine"],
+      base: ["Musk", "Woody", "Oakmoss"],
     },
     volume: "50ml",
   },
@@ -1042,25 +1083,60 @@ function Navbar({
 
 function CartDrawer() {
   const { state, dispatch, isCartOpen, setIsCartOpen } = useCart();
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [razorpayReady, setRazorpayReady] = useState(false);
 
   const pricing = computeBundlePricing(state.items);
+  const hasItems = state.items.length > 0;
+  const finalTotal = pricing.grandTotal + (hasItems ? DELIVERY_FEE : 0);
 
-  const handleCheckoutSuccess = () => {
-    dispatch({ type: "CLEAR" });
-    setIsCartOpen(false);
-    setCheckoutOpen(false);
+  useEffect(() => {
+    if (document.getElementById("razorpay-sdk")) {
+      setRazorpayReady(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "razorpay-sdk";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => setRazorpayReady(true);
+    script.onerror = () => console.error("Razorpay SDK failed to load.");
+    document.body.appendChild(script);
+  }, []);
+
+  const handleCheckout = () => {
+    if (!window.Razorpay) {
+      alert("Payment gateway is still loading. Please try again in a moment.");
+      return;
+    }
+    const options: RazorpayOptions = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: finalTotal * 100,
+      currency: "INR",
+      name: "Aura Element",
+      description: state.items
+        .map((i) => `${i.product.title} ×${i.quantity}`)
+        .join(", "),
+      handler: (response: RazorpaySuccessResponse) => {
+        alert(`Payment successful!\nPayment ID: ${response.razorpay_payment_id}`);
+        dispatch({ type: "CLEAR" });
+        setIsCartOpen(false);
+      },
+      prefill: { name: "", email: "", contact: "" },
+      notes: {
+        items: state.items
+          .map((i) => `${i.product.title} ×${i.quantity}`)
+          .join("; "),
+        delivery: `₹${DELIVERY_FEE}`,
+      },
+      theme: { color: "#000000" },
+      modal: { backdropclose: false, escape: true },
+    };
+    const rzp = new window.Razorpay(options);
+    rzp.open();
   };
 
   return (
     <>
-      <MockCheckoutModal
-        isOpen={checkoutOpen}
-        grandTotal={pricing.grandTotal}
-        items={state.items}
-        onClose={() => setCheckoutOpen(false)}
-        onSuccess={handleCheckoutSuccess}
-      />
 
       <AnimatePresence>
         {isCartOpen && (
@@ -1289,6 +1365,21 @@ function CartDrawer() {
                     </div>
                   )}
 
+                  <div className="flex justify-between items-center">
+                    <span
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-xs tracking-[0.1em] uppercase text-[#7a6e5f]"
+                    >
+                      Delivery Charges
+                    </span>
+                    <span
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-sm text-[#111111]"
+                    >
+                      ₹{DELIVERY_FEE}
+                    </span>
+                  </div>
+
                   <div className="flex justify-between items-baseline border-t border-[#111111]/8 pt-3">
                     <span
                       style={{ fontFamily: "var(--font-body)" }}
@@ -1300,7 +1391,7 @@ function CartDrawer() {
                       style={{ fontFamily: "var(--font-display)" }}
                       className="text-[#111111] text-2xl"
                     >
-                      ₹{pricing.grandTotal.toLocaleString("en-IN")}
+                      ₹{finalTotal.toLocaleString("en-IN")}
                     </span>
                   </div>
 
@@ -1314,25 +1405,19 @@ function CartDrawer() {
                   )}
 
                   <button
-                    onClick={() => setCheckoutOpen(true)}
+                    onClick={handleCheckout}
+                    disabled={!razorpayReady}
                     style={{ fontFamily: "var(--font-body)" }}
-                    className="w-full bg-[#111111] text-white py-4 flex items-center justify-center gap-3 hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 group mt-1"
+                    className="w-full bg-[#111111] text-white py-4 flex items-center justify-center gap-3 hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 group mt-1 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <span className="text-sm tracking-[0.2em] uppercase font-medium">
-                      Proceed to Checkout
+                      {razorpayReady ? "Proceed to Checkout" : "Loading…"}
                     </span>
                     <ArrowRight
                       size={15}
                       className="group-hover:translate-x-1 transition-transform"
                     />
                   </button>
-
-                  <p
-                    style={{ fontFamily: "var(--font-body)" }}
-                    className="text-center text-[10px] text-[#7a6e5f] tracking-[0.08em]"
-                  >
-                    Free shipping · Easy returns · Secure payment
-                  </p>
                 </div>
               )}
             </motion.div>
@@ -1364,7 +1449,7 @@ function HeroSection({ navigate }: { navigate: NavigateFn }) {
         className="absolute inset-0 origin-center"
       >
         <img
-          src="https://images.unsplash.com/photo-1779562194252-baf05466a528?w=1600&h=1200&fit=crop&auto=format"
+          src="https://i.postimg.cc/SKmknBDz/Firefly-Gemini-Flash-(3).png"
           alt="Aura Element cinematic hero"
           className="w-full h-full object-cover"
         />
@@ -2216,12 +2301,7 @@ function ProductDetailPage({
                 </button>
               </div>
 
-              <p
-                style={{ fontFamily: "var(--font-body)" }}
-                className="text-center text-[10px] text-[#7a6e5f] mt-3 tracking-[0.08em]"
-              >
-                🔒 Mock Checkout · Free shipping · Easy 15-day returns
-              </p>
+              
             </motion.div>
           </div>
         </div>
@@ -2674,17 +2754,17 @@ function ContactUsPage() {
                   {
                     icon: <MapPin size={15} strokeWidth={1.5} className="text-[#e6c79c] shrink-0 mt-0.5" />,
                     label: "Studio",
-                    value: "Aura Element Atelier\n14B, Kalaghoda Arts District\nMumbai 400 001",
+                    value: "Aura Element \nPune 411 046",
                   },
                   {
                     icon: <Phone size={15} strokeWidth={1.5} className="text-[#e6c79c] shrink-0 mt-0.5" />,
                     label: "Phone",
-                    value: "+91 98200 00000\nMon – Sat, 10am – 6pm IST",
+                    value: "+91 98500 59812\nMon – Sat, 10am – 6pm IST",
                   },
                   {
                     icon: <Mail size={15} strokeWidth={1.5} className="text-[#e6c79c] shrink-0 mt-0.5" />,
                     label: "Email",
-                    value: "hello@auraelement.in\npress@auraelement.in",
+                    value: "auraelement.in@gmail.com\nsupport@auraelement.in",
                   },
                 ].map(({ icon, label, value }) => (
                   <div key={label} className="flex gap-3">
@@ -2801,7 +2881,7 @@ function Footer({ navigate }: { navigate: NavigateFn }) {
           style={{ fontFamily: "var(--font-body)" }}
           className="text-[11px] text-[#7a6e5f]"
         >
-          Crafted with intention · Mumbai, India
+          Crafted with intention · Pune, India
         </p>
       </div>
     </footer>
