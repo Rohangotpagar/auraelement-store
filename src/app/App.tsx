@@ -2897,10 +2897,8 @@ type AuthMethod = "google" | "phone" | "email";
 const MOCK_OTP = "123456";
 
 const AVATAR_SEEDS = [
-  "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=80&h=80&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=80&h=80&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&auto=format",
+  "https://i.postimg.cc/52bmxKpy/Login-icon.png",
+  
 ];
 
 function AuthPage({ navigate }: { navigate: NavigateFn }) {
