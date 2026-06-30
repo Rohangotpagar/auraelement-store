@@ -42,7 +42,7 @@ const supabase = createClient(
     auth: {
       persistSession: true,      // Saves session securely to local storage memory
       autoRefreshToken: true,    // Restores active credentials on reload
-      detectSessionInUrl: false, // 💡 STOP internal initialization from crashing on the raw hash loop
+      detectSessionInUrl: true,  // 💡 FIXED: Explicitly allow client to capture Google redirect tokens immediately!
     },
   }
 );
@@ -1090,6 +1090,15 @@ function CartDrawer() {
     script.onload = () => setRazorpayReady(true);
     script.onerror = () => console.error("Razorpay SDK failed to load.");
     document.body.appendChild(script);
+  }, []);
+
+  // 💡 FIXED: Listen for the "Buy Now" custom view event trigger
+  useEffect(() => {
+    const handleBuyNowTrigger = () => {
+      setShowAddressForm(true);
+    };
+    window.addEventListener("trigger-buy-now", handleBuyNowTrigger);
+    return () => window.removeEventListener("trigger-buy-now", handleBuyNowTrigger);
   }, []);
 
   // Reset the address form view when the drawer closes
@@ -2363,8 +2372,19 @@ function ProductDetailPage({
                     className="group-hover:scale-110 transition-transform"
                   />
                 </button>
+                
+                {/* 💡 FIXED: Buy Now clears context, aggregates current quantity, forces cart open, and skips directly to address info layout triggers */}
                 <button
-                  onClick={() => setIsCartOpen(true)}
+                  onClick={() => {
+                    dispatch({ type: "CLEAR" });
+                    for (let i = 0; i < quantity; i++) {
+                      dispatch({ type: "ADD_ITEM", product });
+                    }
+                    setIsCartOpen(true);
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent("trigger-buy-now"));
+                    }, 50);
+                  }}
                   style={{ fontFamily: "var(--font-body)" }}
                   className="w-full bg-[#e6c79c] text-[#111111] py-4 text-xs tracking-[0.25em] uppercase font-semibold hover:bg-[#111111] hover:text-white transition-all duration-300"
                 >
@@ -3107,8 +3127,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
 
 // ─── App Root ──────────────────────────────────────────────────────────────
 
-// ─── REPLACE YOUR ENTIRE export default function App() BLOCK WITH THIS ───
-
 export default function App() {
   const [cartState, cartDispatch] = useReducer(cartReducer, { items: [] });
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -3118,7 +3136,6 @@ export default function App() {
 
   // Real-time Supabase Auth Hook sync pipeline
   useEffect(() => {
-    // 1. Instantly parse URL if returning from a provider redirect loop
     const checkAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -3135,7 +3152,6 @@ export default function App() {
         await supabase.auth.signOut();
         setUser(null);
       } finally {
-        // 💡 Clean hash from the URL so it doesn't try to parse an expired token on manual refreshes
         if (window.location.hash.includes("access_token")) {
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
         }
@@ -3144,7 +3160,6 @@ export default function App() {
 
     checkAuth();
 
-    // 2. Continuous session listener to capture user properties instantly when Google handshake completes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser({
@@ -3158,7 +3173,7 @@ export default function App() {
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
         }
         
-        setPage("home"); // Auto-redirect smoothly right to the catalog storefront floor
+        setPage("home"); 
       } else {
         setUser(null);
       }
