@@ -32,6 +32,14 @@ import {
   EyeOff,
 } from "lucide-react";
 
+// ─── Supabase Client Initialization ───────────────────────────────────────
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL || "",
+  import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+);
+
 // ─── Razorpay global TypeScript declarations ──────────────────────────────
 
 interface RazorpaySuccessResponse {
