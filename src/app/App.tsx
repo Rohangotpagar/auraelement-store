@@ -2942,48 +2942,15 @@ function Footer({ navigate }: { navigate: NavigateFn }) {
   );
 }
 
-// ─── Auth Page ─────────────────────────────────────────────────────────────
-
-type AuthMode = "signin" | "signup";
-type AuthStep = "form" | "otp" | "done";
-type AuthMethod = "google" | "phone" | "email";
-
-const MOCK_OTP = "123456";
-
-const AVATAR_SEEDS = [
-  "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=80&h=80&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=80&h=80&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&auto=format",
-];
+// ─── Auth Page (Google Only Streamlined Layout) ───────────────────────────
 
 function AuthPage({ navigate }: { navigate: NavigateFn }) {
   const { setUser } = useAuth();
-  const [mode, setMode] = useState<AuthMode>("signin");
-  const [method, setMethod] = useState<AuthMethod>("phone");
-  const [step, setStep] = useState<AuthStep>("form");
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [otpError, setOtpError] = useState("");
-  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  const resetForm = () => {
-    setName(""); setEmail(""); setPhone(""); setPassword("");
-    setOtp(["", "", "", "", "", ""]); setOtpError(""); setStep("form");
-  };
-
-  const switchMode = (m: AuthMode) => { setMode(m); resetForm(); };
-
-  const randomAvatar = () => AVATAR_SEEDS[Math.floor(Math.random() * AVATAR_SEEDS.length)];
 
   const handleGoogleAuth = async () => {
     setLoading(true);
+    // Phase 1 Mock Auth Delay
     await new Promise((r) => setTimeout(r, 1800));
     setUser({
       name: "Priya Sharma",
@@ -2995,65 +2962,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
     navigate("home");
   };
 
-  const handleSendOtp = async () => {
-    if (phone.replace(/\D/g, "").length < 10) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
-    setStep("otp");
-    setTimeout(() => otpRefs.current[0]?.focus(), 100);
-  };
-
-  const handleOtpChange = (idx: number, val: string) => {
-    const digit = val.replace(/\D/g, "").slice(-1);
-    const next = [...otp];
-    next[idx] = digit;
-    setOtp(next);
-    setOtpError("");
-    if (digit && idx < 5) otpRefs.current[idx + 1]?.focus();
-  };
-
-  const handleOtpKey = (idx: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !otp[idx] && idx > 0) {
-      otpRefs.current[idx - 1]?.focus();
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    const entered = otp.join("");
-    if (entered.length < 6) { setOtpError("Please enter the 6-digit code."); return; }
-    if (entered !== MOCK_OTP) { setOtpError("Incorrect code. Try 123456 for demo."); return; }
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setUser({
-      name: name || "Aura Member",
-      email: email || "",
-      phone: `+91 ${phone}`,
-      avatar: randomAvatar(),
-      method: "phone",
-    });
-    setLoading(false);
-    navigate("home");
-  };
-
-  const handleEmailAuth = async () => {
-    if (!email || !password) return;
-    if (mode === "signup" && !name) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1400));
-    setUser({
-      name: name || email.split("@")[0],
-      email,
-      avatar: randomAvatar(),
-      method: "google",
-    });
-    setLoading(false);
-    navigate("home");
-  };
-
-  const inputBase =
-    "w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-3 text-sm text-[#111111] placeholder-[#7a6e5f]/50 outline-none transition-colors duration-200";
-
   return (
     <motion.div
       key="auth"
@@ -3063,6 +2971,7 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
       transition={{ duration: 0.35 }}
       className="min-h-screen grid grid-cols-1 md:grid-cols-2"
     >
+      {/* Left — cinematic image panel */}
       <div className="relative hidden md:block bg-[#0a0f1a] overflow-hidden">
         <img
           src="https://images.unsplash.com/photo-158840574880-12d1d2a59f75?w=900&h=1200&fit=crop&auto=format"
@@ -3109,7 +3018,9 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
         </div>
       </div>
 
-      <div className="flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-12 min-h-screen md:min-h-0 bg-white">
+      {/* Right — auth form panel */}
+      <div className="flex flex-col justify-center px-6 sm:px-12 lg:px-16 bg-white min-h-screen md:min-h-0">
+        {/* Mobile brand header */}
         <div className="md:hidden mb-8 text-center">
           <button
             onClick={() => navigate("home")}
@@ -3120,379 +3031,55 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
           </button>
         </div>
 
-        <div className="max-w-sm w-full mx-auto">
-          <div className="flex border-b border-[#111111]/12 mb-8">
-            {(["signin", "signup"] as AuthMode[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => switchMode(m)}
-                style={{ fontFamily: "var(--font-body)" }}
-                className={`flex-1 pb-3 text-xs tracking-[0.22em] uppercase border-b-2 -mb-px transition-all duration-200 ${
-                  mode === m
-                    ? "border-[#e6c79c] text-[#111111]"
-                    : "border-transparent text-[#7a6e5f] hover:text-[#111111]"
-                }`}
-              >
-                {m === "signin" ? "Sign In" : "Create Account"}
-              </button>
-            ))}
+        <div className="max-w-sm w-full mx-auto text-center md:text-left">
+          {/* Heading */}
+          <div className="mb-8">
+            <h3
+              style={{ fontFamily: "var(--font-display)" }}
+              className="text-[#111111] text-3xl sm:text-4xl"
+            >
+              Welcome to the Club.
+            </h3>
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-[#7a6e5f] text-sm font-light mt-2 leading-relaxed"
+            >
+              Sign in or create your account instantly using Google Secure Auth to manage your signature orders.
+            </p>
           </div>
 
-          <AnimatePresence mode="wait">
-            {step === "otp" ? (
-              <motion.div
-                key="otp"
-                initial={{ opacity: 0, x: 24 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -24 }}
-                transition={{ duration: 0.3 }}
-              >
-                <button
-                  onClick={() => setStep("form")}
-                  style={{ fontFamily: "var(--font-body)" }}
-                  className="text-xs tracking-[0.15em] uppercase text-[#7a6e5f] hover:text-[#111111] transition-colors mb-6 flex items-center gap-2"
-                >
-                  ← Back
-                </button>
-                <div className="mb-6">
-                  <h3
-                    style={{ fontFamily: "var(--font-display)" }}
-                    className="text-[#111111] text-2xl mb-2"
-                  >
-                    Verify your number
-                  </h3>
-                  <p
-                    style={{ fontFamily: "var(--font-body)" }}
-                    className="text-[#7a6e5f] text-sm font-light"
-                  >
-                    We sent a 6-digit code to{" "}
-                    <span className="text-[#111111]">+91 {phone}</span>
-                    <br />
-                    <span className="text-[10px] tracking-[0.1em] text-[#e6c79c]">
-                      Demo: use 123456
-                    </span>
-                  </p>
-                </div>
-
-                <div className="flex gap-2.5 mb-2">
-                  {otp.map((digit, idx) => (
-                    <input
-                      key={idx}
-                      ref={(el) => { otpRefs.current[idx] = el; }}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleOtpChange(idx, e.target.value)}
-                      onKeyDown={(e) => handleOtpKey(idx, e)}
-                      style={{ fontFamily: "var(--font-display)" }}
-                      className={`w-full aspect-square text-center text-xl text-[#111111] border-2 focus:outline-none transition-colors duration-200 ${
-                        otpError
-                          ? "border-red-400"
-                          : digit
-                          ? "border-[#e6c79c]"
-                          : "border-[#111111]/15 focus:border-[#e6c79c]"
-                      }`}
-                    />
-                  ))}
-                </div>
-                {otpError && (
-                  <p
-                    style={{ fontFamily: "var(--font-body)" }}
-                    className="text-red-400 text-xs mb-4"
-                  >
-                    {otpError}
-                  </p>
-                )}
-
-                <button
-                  onClick={handleVerifyOtp}
-                  disabled={loading || otp.join("").length < 6}
-                  style={{ fontFamily: "var(--font-body)" }}
-                  className="w-full bg-[#111111] text-white py-4 text-xs tracking-[0.28em] uppercase font-semibold hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 disabled:opacity-40 mt-5 flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      Verifying
-                      <motion.span
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                        className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full inline-block"
-                      />
-                    </>
-                  ) : (
-                    "Verify & Continue"
-                  )}
-                </button>
-
-                <button
-                  onClick={handleSendOtp}
-                  style={{ fontFamily: "var(--font-body)" }}
-                  className="w-full text-center text-xs text-[#7a6e5f] hover:text-[#e6c79c] transition-colors mt-4"
-                >
-                  Resend code
-                </button>
-              </motion.div>
+          {/* Clean Google button layout */}
+          <button
+            onClick={handleGoogleAuth}
+            disabled={loading}
+            style={{ fontFamily: "var(--font-body)" }}
+            className="w-full border border-[#111111]/15 py-4 text-sm font-medium text-[#111111] hover:border-[#e6c79c] hover:bg-[#f5f0e8] transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-50 my-6"
+          >
+            {loading ? (
+              <motion.span
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="w-4 h-4 border-2 border-[#111111] border-t-transparent rounded-full"
+              />
             ) : (
-              <motion.div
-                key={`form-${mode}`}
-                initial={{ opacity: 0, x: 24 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -24 }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="mb-7">
-                  <h3
-                    style={{ fontFamily: "var(--font-display)" }}
-                    className="text-[#111111] text-2xl sm:text-3xl"
-                  >
-                    {mode === "signin" ? "Welcome back." : "Join Aura Element."}
-                  </h3>
-                  <p
-                    style={{ fontFamily: "var(--font-body)" }}
-                    className="text-[#7a6e5f] text-sm font-light mt-1"
-                  >
-                    {mode === "signin"
-                      ? "Sign in to your account to continue."
-                      : "Create your account in seconds."}
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleGoogleAuth}
-                  disabled={loading}
-                  style={{ fontFamily: "var(--font-body)" }}
-                  className="w-full border border-[#111111]/15 py-3.5 text-sm text-[#111111] hover:border-[#e6c79c] hover:bg-[#f5f0e8] transition-all duration-200 flex items-center justify-center gap-3 disabled:opacity-50 mb-5"
-                >
-                  {loading && method === "google" ? (
-                    <motion.span
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-4 h-4 border-2 border-[#111111] border-t-transparent rounded-full"
-                    />
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                    </svg>
-                  )}
-                  <span>
-                    {mode === "signin" ? "Continue with Google" : "Sign up with Google"}
-                  </span>
-                </button>
-
-                <div className="flex items-center gap-4 mb-5">
-                  <div className="flex-1 h-px bg-[#111111]/10" />
-                  <span
-                    style={{ fontFamily: "var(--font-body)" }}
-                    className="text-[11px] tracking-[0.2em] uppercase text-[#7a6e5f]"
-                  >
-                    Or
-                  </span>
-                  <div className="flex-1 h-px bg-[#111111]/10" />
-                </div>
-
-                <div className="flex gap-2 mb-6">
-                  {(["phone", "email"] as AuthMethod[]).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setMethod(m)}
-                      style={{ fontFamily: "var(--font-body)" }}
-                      className={`flex-1 py-2 text-xs tracking-[0.15em] uppercase border transition-all duration-200 ${
-                        method === m
-                          ? "border-[#e6c79c] bg-[#f5f0e8] text-[#111111]"
-                          : "border-[#111111]/12 text-[#7a6e5f] hover:border-[#e6c79c]/50"
-                      }`}
-                    >
-                      {m === "phone" ? "📱 Phone OTP" : "✉️ Email"}
-                    </button>
-                  ))}
-                </div>
-
-                {method === "phone" && (
-                  <div className="flex flex-col gap-5">
-                    {mode === "signup" && (
-                      <div>
-                        <label style={{ fontFamily: "var(--font-body)" }} className="text-[10px] tracking-[0.18em] uppercase text-[#7a6e5f] block mb-1.5">
-                          Full Name
-                        </label>
-                        <input
-                          type="text"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder="Your full name"
-                          autoComplete="name"
-                          style={{ fontFamily: "var(--font-body)" }}
-                          className={inputBase}
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <label style={{ fontFamily: "var(--font-body)" }} className="text-[10px] tracking-[0.18em] uppercase text-[#7a6e5f] block mb-1.5">
-                        Mobile Number
-                      </label>
-                      <div className="flex items-center border-b border-[#111111]/20 focus-within:border-[#e6c79c] transition-colors">
-                        <span style={{ fontFamily: "var(--font-body)" }} className="text-sm text-[#111111] pr-2 py-3 shrink-0 border-r border-[#111111]/15 mr-3">
-                          +91
-                        </span>
-                        <input
-                          type="tel"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                          placeholder="98765 43210"
-                          autoComplete="tel"
-                          style={{ fontFamily: "var(--font-body)" }}
-                          className="flex-1 bg-transparent py-3 text-sm text-[#111111] placeholder-[#7a6e5f]/50 outline-none"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => { setMethod("phone"); handleSendOtp(); }}
-                      disabled={loading || phone.replace(/\D/g, "").length < 10}
-                      style={{ fontFamily: "var(--font-body)" }}
-                      className="w-full bg-[#111111] text-white py-4 text-xs tracking-[0.28em] uppercase font-semibold hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 disabled:opacity-40 flex items-center justify-center gap-2"
-                    >
-                      {loading ? (
-                        <>
-                          Sending OTP
-                          <motion.span
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full"
-                          />
-                        </>
-                      ) : (
-                        "Send OTP →"
-                      )}
-                    </button>
-                  </div>
-                )}
-
-                {method === "email" && (
-                  <div className="flex flex-col gap-5">
-                    {mode === "signup" && (
-                      <div>
-                        <label style={{ fontFamily: "var(--font-body)" }} className="text-[10px] tracking-[0.18em] uppercase text-[#7a6e5f] block mb-1.5">
-                          Full Name
-                        </label>
-                        <input
-                          type="text"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder="Your full name"
-                          autoComplete="name"
-                          style={{ fontFamily: "var(--font-body)" }}
-                          className={inputBase}
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <label style={{ fontFamily: "var(--font-body)" }} className="text-[10px] tracking-[0.18em] uppercase text-[#7a6e5f] block mb-1.5">
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@email.com"
-                        autoComplete="email"
-                        style={{ fontFamily: "var(--font-body)" }}
-                        className={inputBase}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontFamily: "var(--font-body)" }} className="text-[10px] tracking-[0.18em] uppercase text-[#7a6e5f] block mb-1.5">
-                        Password
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder={mode === "signup" ? "Min. 8 characters" : "Your password"}
-                          autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                          style={{ fontFamily: "var(--font-body)" }}
-                          className={`${inputBase} pr-10`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((v) => !v)}
-                          className="absolute right-0 bottom-3 text-[#7a6e5f] hover:text-[#111111] transition-colors"
-                        >
-                          {showPassword ? <EyeOff size={15} strokeWidth={1.5} /> : <Eye size={15} strokeWidth={1.5} />}
-                        </button>
-                      </div>
-                    </div>
-                    {mode === "signin" && (
-                      <button
-                        style={{ fontFamily: "var(--font-body)" }}
-                        className="text-right text-xs text-[#7a6e5f] hover:text-[#e6c79c] transition-colors -mt-2"
-                      >
-                        Forgot password?
-                      </button>
-                    )}
-                    <button
-                      onClick={handleEmailAuth}
-                      disabled={loading || !email || !password || (mode === "signup" && !name)}
-                      style={{ fontFamily: "var(--font-body)" }}
-                      className="w-full bg-[#111111] text-white py-4 text-xs tracking-[0.28em] uppercase font-semibold hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 disabled:opacity-40 flex items-center justify-center gap-2"
-                    >
-                      {loading ? (
-                        <>
-                          {mode === "signin" ? "Signing In" : "Creating Account"}
-                          <motion.span
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full"
-                          />
-                        </>
-                      ) : mode === "signin" ? (
-                        "Sign In →"
-                      ) : (
-                        "Create Account →"
-                      )}
-                    </button>
-                  </div>
-                )}
-
-                <p
-                  style={{ fontFamily: "var(--font-body)" }}
-                  className="text-center text-xs text-[#7a6e5f] mt-6 leading-relaxed"
-                >
-                  {mode === "signin" ? (
-                    <>
-                      Don&apos;t have an account?{" "}
-                      <button
-                        onClick={() => switchMode("signup")}
-                        className="text-[#e6c79c] hover:text-[#111111] transition-colors"
-                      >
-                        Create one
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      Already have an account?{" "}
-                      <button
-                        onClick={() => switchMode("signin")}
-                        className="text-[#e6c79c] hover:text-[#111111] transition-colors"
-                      >
-                        Sign In
-                      </button>
-                    </>
-                  )}
-                </p>
-
-                <p
-                  style={{ fontFamily: "var(--font-body)" }}
-                  className="text-center text-[10px] text-[#7a6e5f]/60 mt-4 leading-relaxed"
-                >
-                  By continuing you agree to our Terms of Service &amp; Privacy Policy.
-                </p>
-              </motion.div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
             )}
-          </AnimatePresence>
+            <span className="tracking-wider">
+              {loading ? "Connecting securely..." : "Continue with Google"}
+            </span>
+          </button>
+
+          <p
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-center text-[10px] text-[#7a6e5f]/60 leading-relaxed mt-4"
+          >
+            By continuing, you agree to Aura Element's Terms of Service &amp; Privacy Policy.
+          </p>
         </div>
       </div>
     </motion.div>
