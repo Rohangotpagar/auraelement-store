@@ -3101,6 +3101,8 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
 
 // ─── App Root ──────────────────────────────────────────────────────────────
 
+// ─── REPLACE YOUR ENTIRE export default function App() BLOCK WITH THIS ───
+
 export default function App() {
   const [cartState, cartDispatch] = useReducer(cartReducer, { items: [] });
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -3119,7 +3121,16 @@ export default function App() {
           avatar: session.user.user_metadata.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
           method: "google"
         });
+        
+        // 💡 Clean the URL hash immediately if it contains an auth token to prevent 401 stale loops
+        if (window.location.hash.includes("access_token")) {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
       }
+    }).catch(() => {
+      // Clean up stale local references quietly if unauthorized session states occur
+      supabase.auth.signOut();
+      setUser(null);
     });
 
     // 2. Continuous session listener to capture user properties instantly when Google handshake completes
@@ -3131,6 +3142,12 @@ export default function App() {
           avatar: session.user.user_metadata.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
           method: "google"
         });
+        
+        // 💡 Clear hash on state changes as well
+        if (window.location.hash.includes("access_token")) {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+        
         setPage("home"); // Auto-redirect smoothly right to the catalog storefront floor
       } else {
         setUser(null);
@@ -3138,7 +3155,7 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, [setUser, setPage]); // 💡 Fixed: Added hooks to guarantee instant UI header synchronization!
+  }, [setUser, setPage]); 
 
   const navigate: NavigateFn = useCallback((to, productId) => {
     setPage(to);
