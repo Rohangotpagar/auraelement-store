@@ -3137,7 +3137,7 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [setUser, setPage]); // 💡 Fixed: Added hooks to guarantee instant UI header synchronization!
 
   const navigate: NavigateFn = useCallback((to, productId) => {
     setPage(to);
