@@ -40,13 +40,12 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY || "",
   {
     auth: {
-      persistSession: true,      // 💡 Saves the user session to local storage memory instantly
-      autoRefreshToken: true,    // 💡 Keeps the user logged in seamlessly
-      detectSessionInUrl: true   // 💡 FORCES the code to grab that massive Google token immediately!
-    }
+      persistSession: true,      // Saves session securely to local storage memory
+      autoRefreshToken: true,    // Restores active credentials on reload
+      detectSessionInUrl: false, // 💡 STOP internal initialization from crashing on the raw hash loop
+    },
   }
 );
-
 // ─── Razorpay global TypeScript declarations ──────────────────────────────
 
 interface RazorpaySuccessResponse {
