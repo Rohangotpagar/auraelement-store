@@ -3119,29 +3119,34 @@ export default function App() {
 
   // Real-time Supabase Auth Hook sync pipeline
   useEffect(() => {
-    // 1. Read existing secure session storage profile attributes on initial layout paint
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser({
-          name: session.user.user_metadata.full_name || session.user.user_metadata.name || "Aura Member",
-          email: session.user.email || "",
-          avatar: session.user.user_metadata.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
-          method: "google"
-        });
-        
-        // 💡 Clean the URL hash immediately if it contains an auth token to prevent 401 stale loops
+    // 1. Instantly parse URL if returning from a provider redirect loop
+    const checkAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setUser({
+            name: session.user.user_metadata.full_name || session.user.user_metadata.name || "Aura Member",
+            email: session.user.email || "",
+            avatar: session.user.user_metadata.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
+            method: "google"
+          });
+        }
+      } catch (err) {
+        console.error("Auth initialization failed:", err);
+        await supabase.auth.signOut();
+        setUser(null);
+      } finally {
+        // 💡 Clean hash from the URL so it doesn't try to parse an expired token on manual refreshes
         if (window.location.hash.includes("access_token")) {
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
         }
       }
-    }).catch(() => {
-      // Clean up stale local references quietly if unauthorized session states occur
-      supabase.auth.signOut();
-      setUser(null);
-    });
+    };
+
+    checkAuth();
 
     // 2. Continuous session listener to capture user properties instantly when Google handshake completes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser({
           name: session.user.user_metadata.full_name || session.user.user_metadata.name || "Aura Member",
@@ -3150,7 +3155,6 @@ export default function App() {
           method: "google"
         });
         
-        // 💡 Clear hash on state changes as well
         if (window.location.hash.includes("access_token")) {
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
         }
