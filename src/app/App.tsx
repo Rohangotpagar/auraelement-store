@@ -856,6 +856,7 @@ function Navbar({
               )}
             </button>
 
+            {/* ─── Profile Menu State Pipeline ─── */}
             {user ? (
               <div ref={profileRef} className="relative hidden md:block">
                 <button
