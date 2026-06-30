@@ -37,7 +37,14 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL || "",
-  import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+  import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+  {
+    auth: {
+      persistSession: true,      // 💡 Saves the user session to local storage memory instantly
+      autoRefreshToken: true,    // 💡 Keeps the user logged in seamlessly
+      detectSessionInUrl: true   // 💡 FORCES the code to grab that massive Google token immediately!
+    }
+  }
 );
 
 // ─── Razorpay global TypeScript declarations ──────────────────────────────
