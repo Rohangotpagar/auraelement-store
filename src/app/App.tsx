@@ -2949,19 +2949,23 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleAuth = async () => {
-    setLoading(true);
-    // Phase 1 Mock Auth Delay
-    await new Promise((r) => setTimeout(r, 1800));
-    setUser({
-      name: "Priya Sharma",
-      email: "priya.sharma@gmail.com",
-      avatar: AVATAR_SEEDS[0],
-      method: "google",
-    });
-    setLoading(false);
-    navigate("home");
-  };
+    try {
+      setLoading(true);
+      
+      // Fires the official Supabase Google OAuth handoff window
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin, // Returns them directly to auraelement.in after logging in
+        },
+      });
 
+      if (error) throw error;
+    } catch (error: any) {
+      alert("Authentication Error: " + error.message);
+      setLoading(false);
+    }
+  };
   return (
     <motion.div
       key="auth"
@@ -3094,6 +3098,38 @@ export default function App() {
   const [page, setPage] = useState<Page>("home");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+
+  // Real-time Supabase Auth Hook sync pipeline
+  useEffect(() => {
+    // 1. Read existing secure session storage profile attributes on initial layout paint
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({
+          name: session.user.user_metadata.full_name || session.user.user_metadata.name || "Aura Member",
+          email: session.user.email || "",
+          avatar: session.user.user_metadata.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
+          method: "google"
+        });
+      }
+    });
+
+    // 2. Continuous session listener to capture user properties instantly when Google handshake completes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({
+          name: session.user.user_metadata.full_name || session.user.user_metadata.name || "Aura Member",
+          email: session.user.email || "",
+          avatar: session.user.user_metadata.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
+          method: "google"
+        });
+        setPage("home"); // Auto-redirect smoothly right to the catalog storefront floor
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const navigate: NavigateFn = useCallback((to, productId) => {
     setPage(to);
