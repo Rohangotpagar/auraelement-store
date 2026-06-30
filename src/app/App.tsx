@@ -64,19 +64,12 @@ declare global {
   }
 }
 
-// Vite env type extension for VITE_RAZORPAY_KEY_ID
 interface ImportMetaEnv {
   readonly VITE_RAZORPAY_KEY_ID: string;
 }
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
-
-// ─── Layout constants ─────────────────────────────────────────────────────
-// AnnouncementBar: h-8 (32px) mobile, sm:h-9 (36px)
-// Navbar:          h-16 (64px) mobile, sm:h-20 (80px)
-// Total offset:    96px mobile, 116px sm
-// ─────────────────────────────────────────────────────────────────────────
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -123,8 +116,6 @@ interface NavigateFn {
   (page: Page, productId?: string): void;
 }
 
-// ─── Auth types ───────────────────────────────────────────────────────────
-
 interface AuthUser {
   name: string;
   email: string;
@@ -146,19 +137,6 @@ const AuthContext = createContext<AuthContextType>({
 function useAuth(): AuthContextType {
   return useContext(AuthContext);
 }
-
-// ─── Bundle pricing engine ────────────────────────────────────────────────
-//
-// Rule: any 2 perfumes = ₹999 (regardless of which ones).
-// Formula for N total items:
-//   pairs   = floor(N / 2)  → each pair costs ₹999
-//   singles = N % 2         → each single costs ₹799
-//
-// Examples:
-//   1 bottle → ₹799
-//   2 bottles → ₹999
-//   3 bottles → ₹999 + ₹799 = ₹1,798
-//   4 bottles → ₹999 × 2   = ₹1,998
 
 const BUNDLE_PRICE = 999;
 const SALE_PRICE = 799;
@@ -198,8 +176,6 @@ function computeBundlePricing(items: CartItem[]): BundlePricing {
   };
 }
 
-// ─── MongoDB-backed product data (Phase 1: seeded locally) ───────────────
-
 const PRODUCTS: Product[] = [
   {
     id: "1",
@@ -210,10 +186,8 @@ const PRODUCTS: Product[] = [
     salePrice: 799,
     description:
       "A crisp, electric fusion of Bergamot, Lavender, and Cedarwood. Ocean Rush is a high-persistence apparel perfume designed to bond with fabric fibers for a powerful, sophisticated aura that lasts. Fresh and commanding.",
-    main_image_url:
-      "https://i.postimg.cc/5y5wKm3G/OCEAN-RUSH-s.jpg",
-    secondary_image_url:
-      "https://i.postimg.cc/RhHNg17M/aura-element-ocean-rush-perfume-model-lifestyle-jpg-png.jpg",
+    main_image_url: "https://i.postimg.cc/5y5wKm3G/OCEAN-RUSH-s.jpg",
+    secondary_image_url: "https://i.postimg.cc/RhHNg17M/aura-element-ocean-rush-perfume-model-lifestyle-jpg-png.jpg",
     gallery: [
       "https://i.postimg.cc/5y5wKm3G/OCEAN-RUSH-s.jpg",
       "https://i.postimg.cc/kGbBTNQg/aura-element-ocean-rush-scent-script-story-jpg.jpg",
@@ -238,10 +212,8 @@ const PRODUCTS: Product[] = [
     salePrice: 799,
     description:
       "An intense, aromatic woody fusion with a fresh spicy bite. A bold apparel perfume engineered for maximum sillage and raw energy on fabric.",
-    main_image_url:
-      "https://i.postimg.cc/G2BPG5p0/aura-element-primal-storm-luxury-fragrance-bottle-jpg.jpg",
-    secondary_image_url:
-      "https://i.postimg.cc/wB4ctp9q/aura-element-primal-storm-perfume-model-lifestyle-jpg-png.jpg",
+    main_image_url: "https://i.postimg.cc/G2BPG5p0/aura-element-primal-storm-luxury-fragrance-bottle-jpg.jpg",
+    secondary_image_url: "https://i.postimg.cc/wB4ctp9q/aura-element-primal-storm-perfume-model-lifestyle-jpg-png.jpg",
     gallery: [
       "https://i.postimg.cc/G2BPG5p0/aura-element-primal-storm-luxury-fragrance-bottle-jpg.jpg",
       "https://i.postimg.cc/W3DmgH4j/aura-element-primal-storm-scent-script-story-jpg.jpg",
@@ -266,10 +238,8 @@ const PRODUCTS: Product[] = [
     salePrice: 799,
     description:
       "An elegant, sweet embrace of Pear Blossom, Red Berries, and Italian Mandarin. Velvet Blossom is a high-persistence apparel perfume that leaves a sophisticated, soft, and undeniable trail.",
-    main_image_url:
-      "https://i.postimg.cc/vHvngsvJ/aura-element-velvet-blossom-perfume-for-clothing-bottle-jpg.jpg",
-    secondary_image_url:
-      "https://i.postimg.cc/ZKLNBSct/aura-element-velvet-blossom-perfume-model-lifestyle-jpg-png.jpg",
+    main_image_url: "https://i.postimg.cc/vHvngsvJ/aura-element-velvet-blossom-perfume-for-clothing-bottle-jpg.jpg",
+    secondary_image_url: "https://i.postimg.cc/ZKLNBSct/aura-element-velvet-blossom-perfume-model-lifestyle-jpg-png.jpg",
     gallery: [
       "https://i.postimg.cc/vHvngsvJ/aura-element-velvet-blossom-perfume-for-clothing-bottle-jpg.jpg",
       "https://i.postimg.cc/L861jbCK/aura-element-velvet-blossom-scent-script-story-jpg.jpg",
@@ -294,10 +264,8 @@ const PRODUCTS: Product[] = [
     salePrice: 799,
     description:
       "A vibrant, tropical escape featuring Passionfruit, Pineapple, and Vanilla Orchid. Rio Glow is an exotic unisex apparel perfume that captures the warmth of a summer sunset. Fresh, fruity, and undeniably radiant.",
-    main_image_url:
-      "https://i.postimg.cc/W12MX34f/aura-element-rio-glow-long-lasting-perfume-bottle-jpg.jpg",
-    secondary_image_url:
-      "https://i.postimg.cc/nhHv0zLW/aura-element-rio-glow-perfume-model-lifestyle-jpg-png.jpg",
+    main_image_url: "https://i.postimg.cc/W12MX34f/aura-element-rio-glow-long-lasting-perfume-bottle-jpg.jpg",
+    secondary_image_url: "https://i.postimg.cc/nhHv0zLW/aura-element-rio-glow-perfume-model-lifestyle-jpg-png.jpg",
     gallery: [
       "https://i.postimg.cc/W12MX34f/aura-element-rio-glow-long-lasting-perfume-bottle-jpg.jpg",
       "https://i.postimg.cc/t4Xh2TTb/aura-element-rio-glow-scent-script-story-jpg.jpg",
@@ -314,8 +282,6 @@ const PRODUCTS: Product[] = [
     volume: "50ml",
   },
 ];
-
-// ─── Cart reducer ─────────────────────────────────────────────────────────
 
 function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
@@ -355,8 +321,6 @@ function cartReducer(state: CartState, action: CartAction): CartState {
   }
 }
 
-// ─── Cart context ─────────────────────────────────────────────────────────
-
 interface CartContextType {
   state: CartState;
   dispatch: React.Dispatch<CartAction>;
@@ -371,8 +335,6 @@ function useCart(): CartContextType {
   if (!ctx) throw new Error("useCart must be inside CartProvider");
   return ctx;
 }
-
-// ─── Mock Razorpay checkout modal ─────────────────────────────────────────
 
 type PayStep = "select" | "processing" | "success";
 type PayMethod = "upi" | "card" | "wallet";
@@ -1079,11 +1041,23 @@ function Navbar({
   );
 }
 
-// ─── Cart Drawer ───────────────────────────────────────────────────────────
+// ─── Cart Drawer (With Native Address Checkout Form) ──────────────────────
 
 function CartDrawer() {
   const { state, dispatch, isCartOpen, setIsCartOpen } = useCart();
   const [razorpayReady, setRazorpayReady] = useState(false);
+  
+  // New States for Shipping Address capturing pipeline
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  const [shippingDetails, setShippingDetails] = useState({
+    name: '',
+    phone: '',
+    addressLine1: '',
+    addressLine2: '',
+    city: '',
+    state: '',
+    pincode: ''
+  });
 
   const pricing = computeBundlePricing(state.items);
   const hasItems = state.items.length > 0;
@@ -1103,11 +1077,31 @@ function CartDrawer() {
     document.body.appendChild(script);
   }, []);
 
-  const handleCheckout = () => {
+  // Reset the address form view when the drawer closes
+  useEffect(() => {
+    if (!isCartOpen) {
+      setShowAddressForm(false);
+    }
+  }, [isCartOpen]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setShippingDetails(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleCheckoutSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
     if (!window.Razorpay) {
       alert("Payment gateway is still loading. Please try again in a moment.");
       return;
     }
+
+    // Assemble unified address string for Razorpay notes dashboard
+    const fullAddressString = `${shippingDetails.addressLine1}, ${
+      shippingDetails.addressLine2 ? shippingDetails.addressLine2 + ", " : ""
+    }${shippingDetails.city}, ${shippingDetails.state} - ${shippingDetails.pincode}`;
+
     const options: RazorpayOptions = {
       key: import.meta.env.VITE_RAZORPAY_KEY_ID,
       amount: finalTotal * 100,
@@ -1116,13 +1110,22 @@ function CartDrawer() {
       description: state.items
         .map((i) => `${i.product.title} ×${i.quantity}`)
         .join(", "),
+      image: "/favicon.png",
       handler: (response: RazorpaySuccessResponse) => {
         alert(`Payment successful!\nPayment ID: ${response.razorpay_payment_id}`);
         dispatch({ type: "CLEAR" });
         setIsCartOpen(false);
+        setShowAddressForm(false);
       },
-      prefill: { name: "", email: "", contact: "" },
+      prefill: { 
+        name: shippingDetails.name,      // Automatically prefilled in gateway layout
+        contact: shippingDetails.phone,  // Automatically prefilled in gateway layout
+        email: "" 
+      },
       notes: {
+        "Customer Name": shippingDetails.name,
+        "Customer Phone": shippingDetails.phone,
+        "Shipping Address": fullAddressString,
         items: state.items
           .map((i) => `${i.product.title} ×${i.quantity}`)
           .join("; "),
@@ -1131,13 +1134,13 @@ function CartDrawer() {
       theme: { color: "#000000" },
       modal: { backdropclose: false, escape: true },
     };
+
     const rzp = new window.Razorpay(options);
     rzp.open();
   };
 
   return (
     <>
-
       <AnimatePresence>
         {isCartOpen && (
           <>
@@ -1165,13 +1168,15 @@ function CartDrawer() {
                     style={{ fontFamily: "var(--font-display)" }}
                     className="text-xl text-[#111111]"
                   >
-                    Your Bag
+                    {showAddressForm ? "Shipping Address" : "Your Bag"}
                   </h2>
                   <p
                     style={{ fontFamily: "var(--font-body)" }}
                     className="text-xs tracking-[0.15em] uppercase text-[#7a6e5f] mt-0.5"
                   >
-                    {state.items.length === 0
+                    {showAddressForm 
+                      ? "Enter dispatch details"
+                      : state.items.length === 0
                       ? "Nothing added yet"
                       : `${pricing.totalQty} item${pricing.totalQty > 1 ? "s" : ""}`}
                   </p>
@@ -1184,7 +1189,7 @@ function CartDrawer() {
                 </button>
               </div>
 
-              {pricing.totalQty >= 2 && (
+              {pricing.totalQty >= 2 && !showAddressForm && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
@@ -1229,6 +1234,45 @@ function CartDrawer() {
                       </p>
                     </div>
                   </div>
+                ) : showAddressForm ? (
+                  /* ── Premium Address Input Fields Dropdown ── */
+                  <form id="address-checkout-form" onSubmit={handleCheckoutSubmit} className="space-y-4 pt-2">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Full Name *</label>
+                      <input required type="text" name="name" value={shippingDetails.name} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Phone Number *</label>
+                      <input required type="tel" name="phone" value={shippingDetails.phone} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" placeholder="10-digit mobile layout" />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Address Line 1 *</label>
+                      <input required type="text" name="addressLine1" value={shippingDetails.addressLine1} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" placeholder="Flat No., Building, Street Name" />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Address Line 2 (Optional)</label>
+                      <input type="text" name="addressLine2" value={shippingDetails.addressLine2} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" placeholder="Landmark, Locality" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">City *</label>
+                        <input required type="text" name="city" value={shippingDetails.city} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">State *</label>
+                        <input required type="text" name="state" value={shippingDetails.state} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Pincode *</label>
+                      <input required type="text" name="pincode" value={shippingDetails.pincode} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" />
+                    </div>
+                  </form>
                 ) : (
                   <div>
                     {state.items.map((item, idx) => (
@@ -1373,7 +1417,7 @@ function CartDrawer() {
                       Delivery Charges
                     </span>
                     <span
-                      style={{ fontFamily: "var(--font-body)" }}
+                      style={{ fontFamily: "var(--font-sm)" }}
                       className="text-sm text-[#111111]"
                     >
                       ₹{DELIVERY_FEE}
@@ -1395,7 +1439,7 @@ function CartDrawer() {
                     </span>
                   </div>
 
-                  {pricing.youSave > 0 && (
+                  {pricing.youSave > 0 && !showAddressForm && (
                     <p
                       style={{ fontFamily: "var(--font-body)" }}
                       className="text-center text-[11px] text-[#e6c79c] tracking-[0.1em]"
@@ -1404,20 +1448,39 @@ function CartDrawer() {
                     </p>
                   )}
 
-                  <button
-                    onClick={handleCheckout}
-                    disabled={!razorpayReady}
-                    style={{ fontFamily: "var(--font-body)" }}
-                    className="w-full bg-[#111111] text-white py-4 flex items-center justify-center gap-3 hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 group mt-1 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    <span className="text-sm tracking-[0.2em] uppercase font-medium">
-                      {razorpayReady ? "Proceed to Checkout" : "Loading…"}
-                    </span>
-                    <ArrowRight
-                      size={15}
-                      className="group-hover:translate-x-1 transition-transform"
-                    />
-                  </button>
+                  {/* ── Action Buttons Control Matrix ── */}
+                  {!showAddressForm ? (
+                    <button
+                      onClick={() => setShowAddressForm(true)}
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="w-full bg-[#111111] text-white py-4 flex items-center justify-center gap-3 hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 group mt-1"
+                    >
+                      <span className="text-sm tracking-[0.2em] uppercase font-medium">
+                        Proceed to Checkout
+                      </span>
+                      <ArrowRight size={15} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  ) : (
+                    <div className="flex gap-3 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddressForm(false)}
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="w-1/3 border border-[#111111]/20 text-[#111111] py-4 text-xs tracking-[0.15em] uppercase hover:bg-[#f5f0e8] transition-all"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="submit"
+                        form="address-checkout-form"
+                        disabled={!razorpayReady}
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="w-2/3 bg-[#111111] text-white py-4 text-xs tracking-[0.2em] uppercase font-semibold hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 disabled:opacity-60"
+                      >
+                        {razorpayReady ? "Authorize & Pay Now" : "Loading Gateway…"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>
@@ -1927,8 +1990,6 @@ function ProductImageGallery({
 
   return (
     <div className="flex flex-col bg-[#f5f0e8]">
-
-      {/* ── BIG main image on top ── */}
       <div className="relative w-full overflow-hidden bg-[#f5f0e8]" style={{ aspectRatio: "3/2" }}>
         <AnimatePresence mode="wait">
           <motion.img
@@ -1943,7 +2004,6 @@ function ProductImageGallery({
           />
         </AnimatePresence>
 
-        {/* Back button */}
         <button
           onClick={onBack}
           style={{ fontFamily: "var(--font-body)" }}
@@ -1952,12 +2012,10 @@ function ProductImageGallery({
           ← Back
         </button>
 
-        {/* Badges */}
         <div className="absolute top-4 right-4 z-10 flex flex-col gap-1.5">
           {badges}
         </div>
 
-        {/* Counter */}
         <div className="absolute bottom-4 right-4 z-10 bg-[#111111]/45 backdrop-blur-sm px-2.5 py-1">
           <span style={{ fontFamily: "var(--font-body)" }} className="text-white text-[11px] tracking-[0.12em]">
             {active + 1} / {images.length}
@@ -1965,7 +2023,6 @@ function ProductImageGallery({
         </div>
       </div>
 
-      {/* ── Small thumbnails at bottom ── */}
       <div className="flex flex-nowrap gap-2.5 overflow-x-auto overflow-y-hidden bg-white border-t border-[#111111]/8 px-[170px] py-[12px]" style={{ height: 104 }}>
         {images.map((src, i) => (
           <button
@@ -1993,7 +2050,6 @@ function ProductImageGallery({
           </button>
         ))}
       </div>
-
     </div>
   );
 }
@@ -2293,15 +2349,13 @@ function ProductDetailPage({
                   />
                 </button>
                 <button
-                  onClick={() => setCheckoutOpen(true)}
+                  onClick={() => setIsCartOpen(true)}
                   style={{ fontFamily: "var(--font-body)" }}
                   className="w-full bg-[#e6c79c] text-[#111111] py-4 text-xs tracking-[0.25em] uppercase font-semibold hover:bg-[#111111] hover:text-white transition-all duration-300"
                 >
                   Buy Now · ₹{(product.salePrice * quantity).toLocaleString("en-IN")}
                 </button>
               </div>
-
-              
             </motion.div>
           </div>
         </div>
@@ -2324,7 +2378,7 @@ function RelatedProducts({
 }) {
   const related = PRODUCTS.filter((p) => p.id !== currentId);
   return (
-    <section className="mt-6 border-t-4 border-[#f5f0e8] bg-white px-[56px] py-[479px]">
+    <section className="mt-6 border-t-4 border-[#f5f0e8] bg-white px-[56px] py-[80px]">
       <div className="flex items-end justify-between mb-10">
         <h3
           style={{ fontFamily: "var(--font-display)" }}
@@ -2897,8 +2951,10 @@ type AuthMethod = "google" | "phone" | "email";
 const MOCK_OTP = "123456";
 
 const AVATAR_SEEDS = [
-  "https://i.postimg.cc/52bmxKpy/Login-icon.png",
-  
+  "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=80&h=80&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=80&h=80&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=80&h=80&fit=crop&auto=format",
 ];
 
 function AuthPage({ navigate }: { navigate: NavigateFn }) {
@@ -2909,7 +2965,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // form fields
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -3008,10 +3063,9 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
       transition={{ duration: 0.35 }}
       className="min-h-screen grid grid-cols-1 md:grid-cols-2"
     >
-      {/* Left — cinematic image panel */}
       <div className="relative hidden md:block bg-[#0a0f1a] overflow-hidden">
         <img
-          src="https://images.unsplash.com/photo-1588405748880-12d1d2a59f75?w=900&h=1200&fit=crop&auto=format"
+          src="https://images.unsplash.com/photo-158840574880-12d1d2a59f75?w=900&h=1200&fit=crop&auto=format"
           alt="Aura Element"
           className="w-full h-full object-cover opacity-60"
         />
@@ -3055,9 +3109,7 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
         </div>
       </div>
 
-      {/* Right — auth form panel */}
       <div className="flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-12 min-h-screen md:min-h-0 bg-white">
-        {/* Mobile brand header */}
         <div className="md:hidden mb-8 text-center">
           <button
             onClick={() => navigate("home")}
@@ -3069,7 +3121,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
         </div>
 
         <div className="max-w-sm w-full mx-auto">
-          {/* Mode tabs */}
           <div className="flex border-b border-[#111111]/12 mb-8">
             {(["signin", "signup"] as AuthMode[]).map((m) => (
               <button
@@ -3089,7 +3140,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
 
           <AnimatePresence mode="wait">
             {step === "otp" ? (
-              // ── OTP verification screen ─────────────────────────────────
               <motion.div
                 key="otp"
                 initial={{ opacity: 0, x: 24 }}
@@ -3184,7 +3234,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
                 </button>
               </motion.div>
             ) : (
-              // ── Main auth form ───────────────────────────────────────────
               <motion.div
                 key={`form-${mode}`}
                 initial={{ opacity: 0, x: 24 }}
@@ -3192,7 +3241,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
                 exit={{ opacity: 0, x: -24 }}
                 transition={{ duration: 0.3 }}
               >
-                {/* Heading */}
                 <div className="mb-7">
                   <h3
                     style={{ fontFamily: "var(--font-display)" }}
@@ -3210,7 +3258,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
                   </p>
                 </div>
 
-                {/* Google button */}
                 <button
                   onClick={handleGoogleAuth}
                   disabled={loading}
@@ -3236,7 +3283,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
                   </span>
                 </button>
 
-                {/* Divider */}
                 <div className="flex items-center gap-4 mb-5">
                   <div className="flex-1 h-px bg-[#111111]/10" />
                   <span
@@ -3248,7 +3294,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
                   <div className="flex-1 h-px bg-[#111111]/10" />
                 </div>
 
-                {/* Method tabs: Phone / Email */}
                 <div className="flex gap-2 mb-6">
                   {(["phone", "email"] as AuthMethod[]).map((m) => (
                     <button
@@ -3266,7 +3311,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
                   ))}
                 </div>
 
-                {/* Phone OTP method */}
                 {method === "phone" && (
                   <div className="flex flex-col gap-5">
                     {mode === "signup" && (
@@ -3326,7 +3370,6 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
                   </div>
                 )}
 
-                {/* Email method */}
                 {method === "email" && (
                   <div className="flex flex-col gap-5">
                     {mode === "signup" && (
