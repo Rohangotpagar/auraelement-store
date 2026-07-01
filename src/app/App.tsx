@@ -925,7 +925,11 @@ function Navbar({
                         </p>
                       </div>
                       <button
-                        onClick={() => { setUser(null); setProfileOpen(false); }}
+                        onClick={async () => {
+  await supabase.auth.signOut();
+  setUser(null);
+  setProfileOpen(false);
+}}
                         style={{ fontFamily: "var(--font-body)" }}
                         className="w-full flex items-center gap-3 px-4 py-3 text-sm text-[#7a6e5f] hover:text-[#111111] hover:bg-[#f5f0e8] transition-colors"
                       >
@@ -1045,7 +1049,11 @@ function Navbar({
                         {user.name}
                       </p>
                       <button
-                        onClick={() => { setUser(null); setMenuOpen(false); }}
+                        onClick={async () => {
+  await supabase.auth.signOut();
+  setUser(null);
+  setMenuOpen(false);
+}}
                         style={{ fontFamily: "var(--font-body)" }}
                         className="text-xs text-[#7a6e5f] tracking-[0.1em] flex items-center gap-1 mt-0.5"
                       >
