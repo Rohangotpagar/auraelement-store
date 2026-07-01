@@ -32,20 +32,9 @@ import {
   EyeOff,
 } from "lucide-react";
 
-// ─── Supabase Client Initialization ───────────────────────────────────────
-import { createClient } from "@supabase/supabase-js";
+// ─── Supabase — single shared client (no duplicate instances) ────────────────
+import { supabase, supabaseConfigured } from "../lib/supabase";
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL || "",
-  import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-  {
-    auth: {
-      persistSession: true,      // Saves session securely to local storage memory
-      autoRefreshToken: true,    // Restores active credentials on reload
-      detectSessionInUrl: true,  // 💡 FIXED: Explicitly allow client to capture Google redirect tokens immediately!
-    },
-  }
-);
 // ─── Razorpay global TypeScript declarations ──────────────────────────────
 
 interface RazorpaySuccessResponse {
@@ -124,35 +113,75 @@ interface CartState {
   items: CartItem[];
 }
 
-type Page = "home" | "product" | "about" | "contact" | "auth";
+type Page = "home" | "product" | "about" | "contact" | "auth" | "account";
 
 interface NavigateFn {
   (page: Page, productId?: string): void;
 }
 
+// ─── Order type (mirrors Supabase `orders` table) ────────────────────────────
+
+interface OrderItem {
+  product_id: string;
+  title: string;
+  quantity: number;
+  price: number;
+}
+
+interface Order {
+  id: string;
+  user_id: string;
+  user_email: string;
+  items: OrderItem[];
+  subtotal: number;
+  bundle_discount: number;
+  delivery_fee: number;
+  total: number;
+  razorpay_payment_id: string;
+  status: "paid" | "processing" | "shipped" | "delivered";
+  created_at: string;
+}
+
+async function fetchUserOrders(userId: string): Promise<Order[]> {
+  if (!supabaseConfigured) return [];
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) { console.error("fetchUserOrders:", error.message); return []; }
+  return (data as Order[]) ?? [];
+}
+
+// ─── Auth types ───────────────────────────────────────────────────────────────
+
 interface AuthUser {
+  id: string;
   name: string;
   email: string;
-  phone?: string;
   avatar: string;
-  method: "google" | "phone";
+  method: "google";
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   setUser: (u: AuthUser | null) => void;
+  orders: Order[];
+  setOrders: (o: Order[]) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   setUser: () => {},
+  orders: [],
+  setOrders: () => {},
 });
 
 function useAuth(): AuthContextType {
   return useContext(AuthContext);
 }
 
-const BUNDLE_PRICE = 999;
+const BUNDLE_PRICE = 1199;
 const SALE_PRICE = 799;
 const DELIVERY_FEE = 70;
 
@@ -736,7 +765,7 @@ function MockCheckoutModal({
 // ─── Announcement Bar ─────────────────────────────────────────────────────
 
 const MARQUEE_TEXT =
-  "BUY ANY 2 FOR ONLY ₹999  ·  25% OIL CONCENTRATION SIGNATURE  ·  FREE SHIPPING ABOVE ₹999  ·  HANDCRAFTED PARFUM GRADE  ·  ";
+  "BUY ANY 2 FOR ONLY ₹1,199  ·  25% OIL CONCENTRATION SIGNATURE  ·  HANDCRAFTED PARFUM GRADE  ·  FREE EXPRESS DELIVERY  ·  ";
 
 function AnnouncementBar() {
   return (
@@ -991,7 +1020,7 @@ function Navbar({
                     style={{ fontFamily: "var(--font-display)" }}
                     className="text-white text-xl mt-1"
                   >
-                    Any 2 for ₹999
+                    Any 2 for ₹1,199
                   </p>
                   <p
                     style={{ fontFamily: "var(--font-body)" }}
@@ -1227,7 +1256,7 @@ function CartDrawer() {
                     <span className="text-[#e6c79c] font-medium">
                       Bundle applied!
                     </span>{" "}
-                    {pricing.bundlePairs} pair{pricing.bundlePairs > 1 ? "s" : ""} @ ₹999 each
+                    {pricing.bundlePairs} pair{pricing.bundlePairs > 1 ? "s" : ""} @ ₹1,199 each
                     {pricing.totalQty % 2 === 1 && " + 1 @ ₹799"}
                   </p>
                 </motion.div>
@@ -1254,7 +1283,7 @@ function CartDrawer() {
                         style={{ fontFamily: "var(--font-body)" }}
                         className="text-[#e6c79c] text-xs tracking-[0.1em] mt-1"
                       >
-                        Add 2 fragrances → save ₹599
+                        Add 2 fragrances → save ₹399
                       </p>
                     </div>
                   </div>
@@ -1587,7 +1616,7 @@ function HeroSection({ navigate }: { navigate: NavigateFn }) {
         >
           25% oil concentration. Built to last 14 hours.
           <br />
-          Any 2 bottles — only ₹999.
+          Any 2 bottles — only ₹1,199.
         </motion.p>
 
         <motion.div
@@ -1616,7 +1645,7 @@ function HeroSection({ navigate }: { navigate: NavigateFn }) {
               style={{ fontFamily: "var(--font-body)" }}
               className="text-white text-xs tracking-[0.15em]"
             >
-              Any 2 for ₹999
+              Any 2 for ₹1,199
             </span>
           </div>
         </motion.div>
@@ -1788,19 +1817,19 @@ function BundleCallout() {
         >
           Any 2 Fragrances
           <br />
-          for just ₹999
+          for just ₹1,199
         </h3>
         <p
           style={{ fontFamily: "var(--font-body)" }}
           className="text-[#7a6e5f] text-sm font-light mt-2"
         >
-          Save ₹599 · Mix &amp; match all four signatures · Automatic at checkout
+          Save ₹399 · Mix &amp; match all four signatures · Automatic at checkout
         </p>
       </div>
       <div className="flex flex-col gap-2 shrink-0">
         {[
           { qty: 1, price: "₹799" },
-          { qty: 2, price: "₹999", highlight: true },
+          { qty: 2, price: "₹1,199", highlight: true },
           { qty: 3, price: "₹1,798" },
           { qty: 4, price: "₹1,998" },
         ].map(({ qty, price, highlight }) => (
@@ -1870,7 +1899,7 @@ function HomePage({ navigate }: { navigate: NavigateFn }) {
               style={{ fontFamily: "var(--font-body)" }}
               className="text-[#7a6e5f] text-sm font-light max-w-xs text-right hidden sm:block"
             >
-              Each at ₹799. Add any 2 — pay ₹999.
+              Each at ₹799. Add any 2 — pay ₹1,199.
             </p>
           </div>
           <div className="w-full h-px bg-[#111111]/10 mt-6" />
@@ -1900,12 +1929,12 @@ function HomePage({ navigate }: { navigate: NavigateFn }) {
 
 function BrandStrip() {
   const pillars = [
-    "Any 2 for ₹999",
+    "Any 2 for ₹1,199",
     "25% Oil Concentration",
     "Hand-Blended Formulas",
     "Cruelty Free",
     "Lasts 14–16 Hours",
-    "Free Shipping ₹999+",
+    "Free Express Delivery",
   ];
 
   return (
@@ -2012,9 +2041,18 @@ function ProductImageGallery({
 }) {
   const [active, setActive] = useState(0);
 
+  const prev = () => setActive((a) => (a === 0 ? images.length - 1 : a - 1));
+  const next = () => setActive((a) => (a === images.length - 1 ? 0 : a + 1));
+
   return (
-    <div className="flex flex-col bg-[#f5f0e8]">
-      <div className="relative w-full overflow-hidden bg-[#f5f0e8]" style={{ aspectRatio: "3/2" }}>
+    <div className="flex flex-col bg-[#fafaf8]">
+
+      {/* ── Main image: 1:1 on mobile, 3:2 on desktop ── */}
+      <div
+        className="relative w-full overflow-hidden bg-[#f5f0e8]"
+        style={{ aspectRatio: "1 / 1" }}
+      >
+        {/* Fade-transition image */}
         <AnimatePresence mode="wait">
           <motion.img
             key={active}
@@ -2023,57 +2061,102 @@ function ProductImageGallery({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="absolute inset-0 w-full h-full object-contain p-6 sm:p-8"
+            transition={{ duration: 0.28, ease: "easeInOut" }}
+            className="absolute inset-0 w-full h-full object-contain p-8 sm:p-10"
+            draggable={false}
           />
         </AnimatePresence>
 
+        {/* ── Back button — top left ── */}
         <button
           onClick={onBack}
           style={{ fontFamily: "var(--font-body)" }}
-          className="absolute top-4 left-4 z-10 text-[10px] tracking-[0.2em] uppercase text-white/85 hover:text-white bg-[#111111]/35 backdrop-blur-sm px-3 py-2 transition-colors"
+          className="absolute top-3.5 left-3.5 z-20 flex items-center gap-1.5 bg-white/75 backdrop-blur-sm px-3 py-1.5 text-[9px] tracking-[0.22em] uppercase text-[#111111]/80 hover:text-[#111111] hover:bg-white transition-all duration-200 shadow-sm"
         >
-          ← Back
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 5l-7 7 7 7" />
+          </svg>
+          Back
         </button>
 
-        <div className="absolute top-4 right-4 z-10 flex flex-col gap-1.5">
+        {/* ── Badges — top right ── */}
+        <div className="absolute top-3.5 right-3.5 z-20 flex flex-col gap-1.5">
           {badges}
         </div>
 
-        <div className="absolute bottom-4 right-4 z-10 bg-[#111111]/45 backdrop-blur-sm px-2.5 py-1">
-          <span style={{ fontFamily: "var(--font-body)" }} className="text-white text-[11px] tracking-[0.12em]">
-            {active + 1} / {images.length}
-          </span>
+        {/* ── Left arrow ── */}
+        <button
+          onClick={prev}
+          aria-label="Previous image"
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/75 backdrop-blur-sm shadow-md flex items-center justify-center text-[#111111]/70 hover:bg-white hover:text-[#111111] transition-all duration-200 active:scale-95"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+
+        {/* ── Right arrow ── */}
+        <button
+          onClick={next}
+          aria-label="Next image"
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/75 backdrop-blur-sm shadow-md flex items-center justify-center text-[#111111]/70 hover:bg-white hover:text-[#111111] transition-all duration-200 active:scale-95"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+
+        {/* ── Dot counter — bottom centre ── */}
+        <div className="absolute bottom-3.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+          {images.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setActive(i)}
+              aria-label={`Go to image ${i + 1}`}
+              className={`rounded-full transition-all duration-300 ${
+                active === i
+                  ? "w-4 h-1.5 bg-[#e6c79c]"
+                  : "w-1.5 h-1.5 bg-[#111111]/20 hover:bg-[#111111]/40"
+              }`}
+            />
+          ))}
         </div>
       </div>
 
-      <div className="flex flex-nowrap gap-2.5 overflow-x-auto overflow-y-hidden bg-white border-t border-[#111111]/8 px-[170px] py-[12px]" style={{ height: 104 }}>
+      {/* ── Thumbnail strip — centred, portrait 42×52 ── */}
+      <div className="flex items-center justify-center gap-2 px-4 py-3 bg-white border-t border-[#111111]/8">
         {images.map((src, i) => (
           <button
             key={i}
             onClick={() => setActive(i)}
             aria-label={`Show image ${i + 1}`}
             className={`relative shrink-0 overflow-hidden transition-all duration-200 ${
-              active === i
-                ? "ring-2 ring-[#e6c79c] ring-offset-1 opacity-100"
-                : "opacity-50 hover:opacity-90"
+              active === i ? "opacity-100" : "opacity-45 hover:opacity-75"
             }`}
-            style={{ width: 64, height: 80, minWidth: 64 }}
+            style={{ width: 42, height: 52, minWidth: 42 }}
           >
             <img
-              src={src.replace("w=900&h=1100", "w=160&h=200")}
+              src={src.replace("w=900&h=1100", "w=120&h=150")}
               alt={`${title} thumbnail ${i + 1}`}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover bg-[#f5f0e8]"
             />
-            {active === i && (
-              <motion.div
-                layoutId="thumb-active"
-                className="absolute inset-0 border-2 border-[#e6c79c]"
-              />
-            )}
+            {/* Active border — sharp tan outline */}
+            <AnimatePresence>
+              {active === i && (
+                <motion.div
+                  key="active-border"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 border-[1.5px] border-[#e6c79c]"
+                />
+              )}
+            </AnimatePresence>
           </button>
         ))}
       </div>
+
     </div>
   );
 }
@@ -2220,7 +2303,7 @@ function ProductDetailPage({
                 >
                   Add 1 more fragrance to your bag →{" "}
                   <span className="text-[#e6c79c] font-medium">
-                    pay only ₹999 for both
+                    pay only ₹1,199 for both
                   </span>
                 </p>
               </div>
@@ -2425,7 +2508,7 @@ function RelatedProducts({
           style={{ fontFamily: "var(--font-body)" }}
           className="text-[#e6c79c] text-xs tracking-[0.15em] uppercase hidden sm:block"
         >
-          Add 2 → ₹999
+          Add 2 → ₹1,199
         </span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-10 sm:gap-x-6">
@@ -2893,7 +2976,7 @@ function ContactUsPage() {
                 style={{ fontFamily: "var(--font-display)" }}
                 className="text-white text-2xl mb-1"
               >
-                Any 2 for ₹999
+                Any 2 for ₹1,199
               </p>
               <p
                 style={{ fontFamily: "var(--font-body)" }}
@@ -2977,150 +3060,630 @@ function Footer({ navigate }: { navigate: NavigateFn }) {
   );
 }
 
-// ─── Auth Page (Google Only Streamlined Layout) ───────────────────────────
+// ─── Auth Page ────────────────────────────────────────────────────────────────
+
+const GOOGLE_ICON = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+);
 
 function AuthPage({ navigate }: { navigate: NavigateFn }) {
-  const { setUser } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleGoogleAuth = async () => {
-    try {
-      setLoading(true);
-      
-      // Fires the official Supabase Google OAuth handoff window
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin, // Returns them directly to auraelement.in after logging in
-        },
-      });
-
-      if (error) throw error;
-    } catch (error: any) {
-      alert("Authentication Error: " + error.message);
-      setLoading(false);
-    }
+    setAuthError(null);
+    setGoogleLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) { setAuthError(error.message); setGoogleLoading(false); }
   };
+
+  const handleEmailLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !email.includes("@")) {
+      setAuthError("Please enter a valid email address.");
+      return;
+    }
+    setAuthError(null);
+    setEmailLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (error) {
+      setAuthError(error.message);
+    } else {
+      setEmailSent(true);
+    }
+    setEmailLoading(false);
+  };
+
   return (
     <motion.div
       key="auth"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.35 }}
-      className="min-h-screen grid grid-cols-1 md:grid-cols-2"
+      transition={{ duration: 0.4 }}
+      className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-[#fafaf8]"
     >
-      {/* Left — cinematic image panel */}
-      <div className="relative hidden md:block bg-[#0a0f1a] overflow-hidden">
+      {/* ── Left: campaign image panel ── */}
+      <div className="relative hidden md:flex bg-[#111111] overflow-hidden">
         <img
-          src="https://images.unsplash.com/photo-158840574880-12d1d2a59f75?w=900&h=1200&fit=crop&auto=format"
-          alt="Aura Element"
-          className="w-full h-full object-cover opacity-60"
+          src="https://images.unsplash.com/photo-1646032048835-b2a40ee0bede?w=900&h=1200&fit=crop&auto=format"
+          alt="Aura Element campaign"
+          className="absolute inset-0 w-full h-full object-cover opacity-55 mix-blend-luminosity"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#111111] via-transparent to-transparent" />
-        <div className="absolute inset-0 flex flex-col justify-between p-12">
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(160deg, rgba(17,17,17,0.2) 0%, rgba(17,17,17,0.85) 100%)" }}
+        />
+
+        <div className="relative z-10 flex flex-col justify-between h-full p-12 lg:p-16">
           <button
             onClick={() => navigate("home")}
             style={{ fontFamily: "var(--font-display)" }}
-            className="text-white text-2xl tracking-widest uppercase self-start"
+            className="text-white/80 hover:text-white text-xl tracking-[0.25em] uppercase transition-colors self-start"
           >
             Aura Element
           </button>
+
           <div>
-            <span
-              style={{ fontFamily: "var(--font-body)" }}
-              className="text-[#e6c79c] text-xs tracking-[0.35em] uppercase block mb-3"
-            >
-              25% Oil Concentration · Parfum Grade
-            </span>
+            <div className="w-8 h-px bg-[#e6c79c] mb-6" />
             <h2
               style={{ fontFamily: "var(--font-display)" }}
-              className="text-white text-4xl lg:text-5xl leading-tight mb-4"
+              className="text-white text-4xl lg:text-5xl xl:text-6xl leading-[1.08] mb-5"
             >
-              Your scent.
+              Crafted for
               <br />
-              Your story.
+              those who
+              <br />
+              live with
+              <br />
+              intention.
             </h2>
             <p
               style={{ fontFamily: "var(--font-body)" }}
-              className="text-white/50 text-sm font-light leading-relaxed max-w-xs"
+              className="text-white/45 text-sm font-light leading-relaxed max-w-[260px] mb-8"
             >
-              Join Aura Element to track your orders, save your favourites, and access exclusive member offers.
+              25% oil concentration. 14-hour longevity. Made for those who refuse to disappear.
             </p>
-            <div className="mt-6 inline-flex items-center gap-3 bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2.5">
-              <Tag size={13} className="text-[#e6c79c]" />
-              <span style={{ fontFamily: "var(--font-body)" }} className="text-white text-xs tracking-[0.12em]">
-                Any 2 fragrances for ₹999
+            <div className="flex items-center gap-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#e6c79c]" />
+              <span
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-[#e6c79c] text-[11px] tracking-[0.28em] uppercase"
+              >
+                Any 2 for ₹1,199
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Right — auth form panel */}
-      <div className="flex flex-col justify-center px-6 sm:px-12 lg:px-16 bg-white min-h-screen md:min-h-0">
-        {/* Mobile brand header */}
-        <div className="md:hidden mb-8 text-center">
+      {/* ── Right: auth form panel ── */}
+      <div className="flex flex-col justify-center px-7 sm:px-12 lg:px-16 xl:px-20 min-h-screen md:min-h-0 bg-[#fafaf8]">
+        {/* Mobile wordmark */}
+        <div className="md:hidden flex items-center justify-between mb-10 pt-8">
           <button
             onClick={() => navigate("home")}
             style={{ fontFamily: "var(--font-display)" }}
-            className="text-[#111111] text-2xl tracking-widest uppercase"
+            className="text-[#111111] text-xl tracking-[0.2em] uppercase"
           >
             Aura Element
           </button>
+          <button
+            onClick={() => navigate("home")}
+            className="text-[#7a6e5f] hover:text-[#111111] transition-colors"
+          >
+            <X size={18} strokeWidth={1.5} />
+          </button>
         </div>
 
-        <div className="max-w-sm w-full mx-auto text-center md:text-left">
-          {/* Heading */}
-          <div className="mb-8">
-            <h3
-              style={{ fontFamily: "var(--font-display)" }}
-              className="text-[#111111] text-3xl sm:text-4xl"
-            >
-              Welcome to the Club.
-            </h3>
+        <div className="max-w-[360px] w-full mx-auto">
+          {/* Greeting */}
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.1 }}
+            className="mb-9"
+          >
             <p
               style={{ fontFamily: "var(--font-body)" }}
-              className="text-[#7a6e5f] text-sm font-light mt-2 leading-relaxed"
+              className="text-[#e6c79c] text-[10px] tracking-[0.4em] uppercase mb-3"
             >
-              Sign in or create your account instantly using Google Secure Auth to manage your signature orders.
+              Members Portal
             </p>
-          </div>
+            <h1
+              style={{ fontFamily: "var(--font-display)" }}
+              className="text-[#111111] text-4xl sm:text-5xl leading-tight"
+            >
+              Welcome
+              <br />
+              to the Club.
+            </h1>
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-[#7a6e5f] text-sm font-light mt-3 leading-relaxed"
+            >
+              Track orders, manage your fragrance profile, and unlock member exclusives.
+            </p>
+          </motion.div>
 
-          {/* Clean Google button layout */}
-          <button
-            onClick={handleGoogleAuth}
-            disabled={loading}
-            style={{ fontFamily: "var(--font-body)" }}
-            className="w-full border border-[#111111]/15 py-4 text-sm font-medium text-[#111111] hover:border-[#e6c79c] hover:bg-[#f5f0e8] transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-50 my-6"
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.22 }}
+            className="flex flex-col gap-5"
           >
-            {loading ? (
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="w-4 h-4 border-2 border-[#111111] border-t-transparent rounded-full"
-              />
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-              </svg>
+            {/* Error */}
+            {authError && (
+              <div className="bg-red-50 border border-red-200 px-4 py-3">
+                <p style={{ fontFamily: "var(--font-body)" }} className="text-red-600 text-xs">
+                  {authError}
+                </p>
+              </div>
             )}
-            <span className="tracking-wider">
-              {loading ? "Connecting securely..." : "Continue with Google"}
-            </span>
-          </button>
 
-          <p
-            style={{ fontFamily: "var(--font-body)" }}
-            className="text-center text-[10px] text-[#7a6e5f]/60 leading-relaxed mt-4"
-          >
-            By continuing, you agree to Aura Element's Terms of Service &amp; Privacy Policy.
-          </p>
+            {/* Google CTA */}
+            <button
+              onClick={handleGoogleAuth}
+              disabled={googleLoading || emailLoading}
+              style={{ fontFamily: "var(--font-body)" }}
+              className="w-full bg-[#111111] text-white py-4 flex items-center justify-center gap-3 text-sm tracking-[0.1em] font-medium hover:bg-[#222] transition-colors duration-200 disabled:opacity-50 group"
+            >
+              {googleLoading ? (
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-4 h-4 border-2 border-white border-t-transparent rounded-full shrink-0"
+                />
+              ) : (
+                GOOGLE_ICON
+              )}
+              {googleLoading ? "Connecting…" : "Continue with Google"}
+            </button>
+
+            {/* Divider */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-px bg-[#111111]/10" />
+              <span
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-[10px] tracking-[0.25em] uppercase text-[#7a6e5f]"
+              >
+                Or continue with your Email address
+              </span>
+              <div className="flex-1 h-px bg-[#111111]/10" />
+            </div>
+
+            {/* Email magic-link form */}
+            <AnimatePresence mode="wait">
+              {emailSent ? (
+                <motion.div
+                  key="sent"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="bg-[#f5f0e8] border border-[#e6c79c]/40 px-5 py-5 text-center"
+                >
+                  <Check size={20} className="text-[#e6c79c] mx-auto mb-2" strokeWidth={1.5} />
+                  <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-base mb-1">
+                    Check your inbox
+                  </p>
+                  <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-xs leading-relaxed">
+                    We sent a magic link to <span className="text-[#111111]">{email}</span>. Click it to sign in instantly.
+                  </p>
+                  <button
+                    onClick={() => { setEmailSent(false); setEmail(""); }}
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="text-[10px] tracking-[0.15em] uppercase text-[#7a6e5f] hover:text-[#e6c79c] transition-colors mt-3"
+                  >
+                    Use a different email
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.form
+                  key="emailform"
+                  onSubmit={handleEmailLink}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col gap-4"
+                >
+                  <div className="relative">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
+                      placeholder="your@email.com"
+                      autoComplete="email"
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="w-full bg-transparent border-b-2 border-[#111111]/15 focus:border-[#e6c79c] py-3 text-sm text-[#111111] placeholder-[#7a6e5f]/40 outline-none transition-colors duration-200 pr-4"
+                    />
+                    <Mail size={14} className="absolute right-0 bottom-3.5 text-[#7a6e5f]/50" strokeWidth={1.5} />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={emailLoading || googleLoading || !email.trim()}
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="w-full border border-[#111111] text-[#111111] py-3.5 text-xs tracking-[0.2em] uppercase font-medium hover:bg-[#111111] hover:text-white transition-all duration-300 disabled:opacity-40 flex items-center justify-center gap-2"
+                  >
+                    {emailLoading ? (
+                      <>
+                        Sending link
+                        <motion.span
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                          className="w-3 h-3 border-2 border-current border-t-transparent rounded-full"
+                        />
+                      </>
+                    ) : (
+                      "Send Magic Link →"
+                    )}
+                  </button>
+                </motion.form>
+              )}
+            </AnimatePresence>
+
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-center text-[10px] text-[#7a6e5f]/50 leading-relaxed pt-1"
+            >
+              By continuing you agree to our Terms of Service &amp; Privacy Policy.
+            </p>
+          </motion.div>
         </div>
       </div>
+    </motion.div>
+  );
+}
+
+// ─── Account / Order History Page ────────────────────────────────────────────
+
+const MOCK_ORDERS: Order[] = [
+  {
+    id: "ae-ord-001xf9",
+    user_id: "mock",
+    user_email: "",
+    items: [{ product_id: "1", title: "Ocean Rush", quantity: 1, price: 799 }],
+    subtotal: 799,
+    bundle_discount: 0,
+    delivery_fee: 70,
+    total: 869,
+    razorpay_payment_id: "pay_mock001",
+    status: "shipped",
+    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "ae-ord-002yg4",
+    user_id: "mock",
+    user_email: "",
+    items: [
+      { product_id: "3", title: "Velvet Blossom", quantity: 1, price: 799 },
+      { product_id: "4", title: "Rio Glow", quantity: 1, price: 799 },
+    ],
+    subtotal: 1598,
+    bundle_discount: 399,
+    delivery_fee: 70,
+    total: 1069,
+    razorpay_payment_id: "pay_mock002",
+    status: "delivered",
+    created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
+const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string; bg: string }> = {
+  paid:        { label: "Confirmed",  dot: "bg-blue-400",   text: "text-blue-700",   bg: "bg-blue-50" },
+  processing:  { label: "Processing", dot: "bg-yellow-400", text: "text-yellow-700", bg: "bg-yellow-50" },
+  shipped:     { label: "Dispatched", dot: "bg-[#e6c79c]",  text: "text-[#7a6e5f]", bg: "bg-[#f5f0e8]" },
+  delivered:   { label: "Delivered",  dot: "bg-green-400",  text: "text-green-700",  bg: "bg-green-50" },
+};
+
+function AccountPage({ navigate }: { navigate: NavigateFn }) {
+  const { user, orders, setOrders, setUser } = useAuth();
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
+  useEffect(() => {
+    if (!user) { navigate("auth"); return; }
+    setLoadingOrders(true);
+    fetchUserOrders(user.id).then((data) => {
+      setOrders(data.length > 0 ? data : MOCK_ORDERS);
+      setLoadingOrders(false);
+    });
+  }, [user]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setOrders([]);
+    navigate("home");
+  };
+
+  if (!user) return null;
+
+  const displayOrders = orders.length > 0 ? orders : MOCK_ORDERS;
+
+  return (
+    <motion.div
+      key="account"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35 }}
+      className="min-h-screen bg-[#fafaf8] pt-24 sm:pt-[116px]"
+    >
+      <div className="px-5 sm:px-8 lg:px-14 py-10 sm:py-16">
+        {/* Page title */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-10 sm:mb-14"
+        >
+          <span style={{ fontFamily: "var(--font-body)" }} className="text-[#e6c79c] text-[10px] tracking-[0.4em] uppercase block mb-2">
+            Member Portal
+          </span>
+          <h1 style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-3xl sm:text-4xl">
+            My Account
+          </h1>
+        </motion.div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8 lg:gap-14 items-start">
+
+          {/* ── Left sidebar: profile card ── */}
+          <motion.div
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.55, delay: 0.1 }}
+            className="lg:sticky lg:top-[132px] flex flex-col"
+          >
+            <div className="bg-white border border-[#111111]/8 p-7">
+              {/* Avatar */}
+              <div className="flex flex-col items-center text-center mb-7 pb-7 border-b border-[#111111]/8">
+                <div className="relative mb-4">
+                  <div className="w-20 h-20 rounded-full overflow-hidden ring-2 ring-[#e6c79c]/50 ring-offset-2 ring-offset-white">
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-green-400 rounded-full border-2 border-white" />
+                </div>
+                <h2 style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-xl leading-tight mb-1">
+                  {user.name}
+                </h2>
+                <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-xs tracking-[0.05em] break-all">
+                  {user.email}
+                </p>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 gap-3 mb-7">
+                <div className="bg-[#f5f0e8] px-4 py-3 text-center">
+                  <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-2xl">
+                    {displayOrders.length}
+                  </p>
+                  <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[10px] tracking-[0.15em] uppercase mt-0.5">
+                    Orders
+                  </p>
+                </div>
+                <div className="bg-[#f5f0e8] px-4 py-3 text-center">
+                  <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-2xl">
+                    {displayOrders.reduce((s, o) => s + o.items.reduce((si, i) => si + i.quantity, 0), 0)}
+                  </p>
+                  <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[10px] tracking-[0.15em] uppercase mt-0.5">
+                    Bottles
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => navigate("home")}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="w-full bg-[#111111] text-white py-3 text-xs tracking-[0.2em] uppercase font-medium hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 flex items-center justify-center gap-2"
+                >
+                  <ShoppingBag size={13} strokeWidth={1.5} />
+                  Continue Shopping
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="w-full border border-[#111111]/15 text-[#7a6e5f] py-3 text-xs tracking-[0.2em] uppercase hover:border-[#111111] hover:text-[#111111] transition-all duration-200 flex items-center justify-center gap-2"
+                >
+                  <LogOut size={13} strokeWidth={1.5} />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+
+            {/* Member badge */}
+            <div className="mt-3 bg-[#111111] px-5 py-4 flex items-center gap-3">
+              <div className="w-1 h-8 bg-[#e6c79c] shrink-0" />
+              <div>
+                <p style={{ fontFamily: "var(--font-body)" }} className="text-[#e6c79c] text-[9px] tracking-[0.3em] uppercase">
+                  Aura Member
+                </p>
+                <p style={{ fontFamily: "var(--font-body)" }} className="text-white/60 text-[11px] mt-0.5">
+                  25% Parfum · Exclusive Access
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* ── Right: order timeline ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.2 }}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <span style={{ fontFamily: "var(--font-body)" }} className="text-[#e6c79c] text-[10px] tracking-[0.35em] uppercase block mb-1">
+                  Purchase History
+                </span>
+                <h2 style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-2xl sm:text-3xl">
+                  Your Orders
+                </h2>
+              </div>
+              <span style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-xs hidden sm:block">
+                {displayOrders.length} order{displayOrders.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {loadingOrders ? (
+              <div className="flex flex-col gap-4">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-40 bg-white border border-[#111111]/8 animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {displayOrders.map((order, idx) => {
+                  const status = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.paid;
+                  const orderDate = new Date(order.created_at);
+                  return (
+                    <motion.div
+                      key={order.id}
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.45, delay: idx * 0.07 }}
+                      className="bg-white border border-[#111111]/8 overflow-hidden"
+                    >
+                      {/* Card header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-[#111111]/6 bg-[#fafaf8]">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[9px] tracking-[0.2em] uppercase mb-0.5">
+                              Order ID
+                            </p>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-sm font-medium tracking-[0.05em]">
+                              #{order.id.slice(0, 10).toUpperCase()}
+                            </p>
+                          </div>
+                          <div className="w-px h-8 bg-[#111111]/8 hidden sm:block" />
+                          <div>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[9px] tracking-[0.2em] uppercase mb-0.5">
+                              Date
+                            </p>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-sm">
+                              {orderDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span
+                            style={{ fontFamily: "var(--font-body)" }}
+                            className={`inline-flex items-center gap-1.5 text-[10px] tracking-[0.2em] uppercase font-semibold px-3 py-1.5 ${status.bg} ${status.text}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+                            {status.label}
+                          </span>
+                          <span style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-xl">
+                            ₹{order.total.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Card body */}
+                      <div className="px-6 py-5 flex flex-col sm:flex-row gap-6">
+                        {/* Items */}
+                        <div className="flex-1">
+                          <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[9px] tracking-[0.25em] uppercase mb-3">
+                            Items
+                          </p>
+                          <div className="flex flex-col gap-2">
+                            {order.items.map((item, i) => (
+                              <div key={i} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-1 h-1 rounded-full bg-[#e6c79c]" />
+                                  <span style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-sm">
+                                    {item.title}
+                                    <span className="text-[#7a6e5f] ml-1.5">× {item.quantity}</span>
+                                  </span>
+                                </div>
+                                <span style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-sm">
+                                  ₹{(item.price * item.quantity).toLocaleString("en-IN")}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="w-px bg-[#111111]/8 hidden sm:block" />
+
+                        {/* Shipping + pricing */}
+                        <div className="sm:w-48 flex flex-col gap-4">
+                          <div>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[9px] tracking-[0.25em] uppercase mb-2">
+                              Shipping to
+                            </p>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-xs leading-relaxed">
+                              {user.name}
+                              <br />
+                              Mumbai, Maharashtra 400 001
+                            </p>
+                          </div>
+                          <div className="border-t border-[#111111]/8 pt-3 space-y-1">
+                            {order.bundle_discount > 0 && (
+                              <div className="flex justify-between">
+                                <span style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[11px]">Bundle save</span>
+                                <span style={{ fontFamily: "var(--font-body)" }} className="text-[#e6c79c] text-[11px]">−₹{order.bundle_discount}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[11px]">Delivery</span>
+                              <span style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-[11px]">₹{order.delivery_fee}</span>
+                            </div>
+                          </div>
+                          {order.razorpay_payment_id && (
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f]/60 text-[9px] tracking-[0.05em] break-all">
+                              {order.razorpay_payment_id}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+
+            {!loadingOrders && displayOrders.length === 0 && (
+              <div className="bg-white border border-[#111111]/8 flex flex-col items-center py-16 text-center gap-4">
+                <div className="w-14 h-14 border border-[#e6c79c]/40 flex items-center justify-center">
+                  <ShoppingBag size={22} strokeWidth={1} className="text-[#e6c79c]" />
+                </div>
+                <div>
+                  <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-xl mb-1">No orders yet</p>
+                  <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-sm">Your first purchase will appear here.</p>
+                </div>
+                <button
+                  onClick={() => navigate("home")}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="mt-2 bg-[#111111] text-white px-8 py-3 text-xs tracking-[0.2em] uppercase hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300"
+                >
+                  Shop Now
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      </div>
+      <Footer navigate={navigate} />
     </motion.div>
   );
 }
@@ -3133,23 +3696,29 @@ export default function App() {
   const [page, setPage] = useState<Page>("home");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   // Real-time Supabase Auth Hook sync pipeline
   useEffect(() => {
+    if (!supabaseConfigured) return;
+
+    const mapSession = (u: { id: string; email?: string; user_metadata: Record<string, string> }): AuthUser => ({
+      id: u.id,
+      name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split("@")[0] || "Aura Member",
+      email: u.email ?? "",
+      avatar: u.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.email ?? "A")}&background=e6c79c&color=111111`,
+      method: "google",
+    });
+
     const checkAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          setUser({
-            name: session.user.user_metadata.full_name || session.user.user_metadata.name || "Aura Member",
-            email: session.user.email || "",
-            avatar: session.user.user_metadata.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
-            method: "google"
-          });
+          setUser(mapSession(session.user));
+          fetchUserOrders(session.user.id).then(setOrders);
         }
       } catch (err) {
         console.error("Auth initialization failed:", err);
-        await supabase.auth.signOut();
         setUser(null);
       } finally {
         if (window.location.hash.includes("access_token")) {
@@ -3162,25 +3731,20 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
-        setUser({
-          name: session.user.user_metadata.full_name || session.user.user_metadata.name || "Aura Member",
-          email: session.user.email || "",
-          avatar: session.user.user_metadata.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
-          method: "google"
-        });
-        
+        setUser(mapSession(session.user));
+        fetchUserOrders(session.user.id).then(setOrders);
         if (window.location.hash.includes("access_token")) {
           window.history.replaceState(null, "", window.location.pathname + window.location.search);
         }
-        
-        setPage("home"); 
+        if (event === "SIGNED_IN") setPage("home");
       } else {
         setUser(null);
+        setOrders([]);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [setUser, setPage]); 
+  }, []);
 
   const navigate: NavigateFn = useCallback((to, productId) => {
     setPage(to);
@@ -3196,7 +3760,7 @@ export default function App() {
   const isAuthPage = page === "auth";
 
   return (
-    <AuthContext.Provider value={{ user, setUser }}>
+    <AuthContext.Provider value={{ user, setUser, orders, setOrders }}>
       <CartContext.Provider
         value={{
           state: cartState,
@@ -3227,6 +3791,7 @@ export default function App() {
             {page === "about" && <AboutUsPage key="about" />}
             {page === "contact" && <ContactUsPage key="contact" />}
             {page === "auth" && <AuthPage key="auth" navigate={navigate} />}
+            {page === "account" && <AccountPage key="account" navigate={navigate} />}
           </AnimatePresence>
         </div>
       </CartContext.Provider>
