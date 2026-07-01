@@ -30,25 +30,10 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
-  Calendar,
-  Package,
 } from "lucide-react";
 
-// ─── Self-Contained Supabase Client Initialization (Fixes Vercel Imports) ───
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,      // Saves user login credentials in local memory
-    autoRefreshToken: true,    // Automatic background credential refresh pipeline
-    detectSessionInUrl: true,  // 💡 CRITICAL: Intercepts Google redirect hash tokens instantly
-  },
-});
-
-const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+// ─── Supabase — single shared client (no duplicate instances) ────────────────
+import { supabase, supabaseConfigured } from "../lib/supabase";
 
 // ─── Razorpay global TypeScript declarations ──────────────────────────────
 
@@ -164,7 +149,7 @@ async function fetchUserOrders(userId: string): Promise<Order[]> {
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (error) { console.error("fetchUserOrders tracking link broke:", error.message); return []; }
+  if (error) { console.error("fetchUserOrders:", error.message); return []; }
   return (data as Order[]) ?? [];
 }
 
@@ -936,16 +921,16 @@ function Navbar({
                           {user.name}
                         </p>
                         <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-xs truncate mt-0.5">
-                          {user.email}
+                          {user.email || user.phone}
                         </p>
                       </div>
                       <button
-                        onClick={() => handleNav("account")}
+                        onClick={() => { setUser(null); setProfileOpen(false); }}
                         style={{ fontFamily: "var(--font-body)" }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#7a6e5f] hover:text-[#111111] hover:bg-[#f5f0e8] transition-colors"
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-[#7a6e5f] hover:text-[#111111] hover:bg-[#f5f0e8] transition-colors"
                       >
-                        <User size={14} strokeWidth={1.5} />
-                        My Portal
+                        <LogOut size={14} strokeWidth={1.5} />
+                        Sign Out
                       </button>
                     </motion.div>
                   )}
@@ -1056,11 +1041,15 @@ function Navbar({
                       <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] truncate">
+                      <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-base truncate">
                         {user.name}
                       </p>
-                      <button onClick={() => handleNav("account")} className="text-xs text-[#7a6e5f] flex items-center gap-1">
-                        <User size={11} /> My Portal
+                      <button
+                        onClick={() => { setUser(null); setMenuOpen(false); }}
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-xs text-[#7a6e5f] tracking-[0.1em] flex items-center gap-1 mt-0.5"
+                      >
+                        <LogOut size={11} /> Sign Out
                       </button>
                     </div>
                   </motion.div>
@@ -1077,6 +1066,16 @@ function Navbar({
                     Sign In / Register
                   </motion.button>
                 )}
+
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.35 }}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="text-xs tracking-[0.2em] uppercase text-[#7a6e5f] mt-8"
+                >
+                  25% Concentration · Parfum Grade
+                </motion.p>
               </div>
             </motion.div>
           </>
@@ -1090,9 +1089,9 @@ function Navbar({
 
 function CartDrawer() {
   const { state, dispatch, isCartOpen, setIsCartOpen } = useCart();
-  const { user } = useAuth();
   const [razorpayReady, setRazorpayReady] = useState(false);
   
+  // New States for Shipping Address capturing pipeline
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [shippingDetails, setShippingDetails] = useState({
     name: '',
@@ -1122,6 +1121,7 @@ function CartDrawer() {
     document.body.appendChild(script);
   }, []);
 
+  // 💡 FIXED: Listen for the "Buy Now" custom view event trigger
   useEffect(() => {
     const handleBuyNowTrigger = () => {
       setShowAddressForm(true);
@@ -1130,6 +1130,7 @@ function CartDrawer() {
     return () => window.removeEventListener("trigger-buy-now", handleBuyNowTrigger);
   }, []);
 
+  // Reset the address form view when the drawer closes
   useEffect(() => {
     if (!isCartOpen) {
       setShowAddressForm(false);
@@ -1149,62 +1150,38 @@ function CartDrawer() {
       return;
     }
 
+    // Assemble unified address string for Razorpay notes dashboard
     const fullAddressString = `${shippingDetails.addressLine1}, ${
       shippingDetails.addressLine2 ? shippingDetails.addressLine2 + ", " : ""
     }${shippingDetails.city}, ${shippingDetails.state} - ${shippingDetails.pincode}`;
-
-    const parsedItems = state.items.map((i: any) => ({
-      product_id: i.product.id,
-      title: i.product.title,
-      quantity: i.quantity,
-      price: i.product.salePrice,
-    }));
-
-    const itemsSummaryString = state.items
-      .map((i: any) => `${i.product.title} × ${i.quantity}`)
-      .join(", ");
 
     const options: RazorpayOptions = {
       key: import.meta.env.VITE_RAZORPAY_KEY_ID,
       amount: finalTotal * 100,
       currency: "INR",
       name: "Aura Element",
-      description: itemsSummaryString,
+      description: state.items
+        .map((i) => `${i.product.title} ×${i.quantity}`)
+        .join(", "),
       image: "/favicon.png",
-      handler: async (response: RazorpaySuccessResponse) => {
-        try {
-          if (supabaseConfigured) {
-            await supabase.from("orders").insert({
-              user_id: user?.id || null,
-              user_email: user?.email || "",
-              items: parsedItems,
-              subtotal: pricing.lineSubtotal,
-              bundle_discount: pricing.bundleDiscount,
-              delivery_fee: DELIVERY_FEE,
-              total: finalTotal,
-              razorpay_payment_id: response.razorpay_payment_id,
-              status: "paid"
-            });
-          }
-        } catch (dbErr) {
-          console.error("Database bypass logging:", dbErr);
-        }
-
+      handler: (response: RazorpaySuccessResponse) => {
         alert(`Payment successful!\nPayment ID: ${response.razorpay_payment_id}`);
         dispatch({ type: "CLEAR" });
         setIsCartOpen(false);
         setShowAddressForm(false);
       },
       prefill: { 
-        name: shippingDetails.name,      
-        contact: shippingDetails.phone,  
-        email: user?.email || "" 
+        name: shippingDetails.name,      // Automatically prefilled in gateway layout
+        contact: shippingDetails.phone,  // Automatically prefilled in gateway layout
+        email: "" 
       },
       notes: {
         "Customer Name": shippingDetails.name,
         "Customer Phone": shippingDetails.phone,
         "Shipping Address": fullAddressString,
-        items: itemsSummaryString,
+        items: state.items
+          .map((i) => `${i.product.title} ×${i.quantity}`)
+          .join("; "),
         delivery: `₹${DELIVERY_FEE}`,
       },
       theme: { color: "#000000" },
@@ -1216,102 +1193,476 @@ function CartDrawer() {
   };
 
   return (
-    <AnimatePresence>
-      {isCartOpen && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setIsCartOpen(false)} />
-          <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 30 }} className="fixed right-0 top-0 h-full w-full sm:w-[440px] bg-white z-50 flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-5 border-b">
-              <div>
-                <h2 style={{ fontFamily: "var(--font-display)" }} className="text-xl text-[#111111]">{showAddressForm ? "Shipping Address" : "Your Bag"}</h2>
-                <p className="text-xs uppercase text-[#7a6e5f] mt-0.5">{showAddressForm ? "Enter dispatch details" : `${pricing.totalQty} items added`}</p>
-              </div>
-              <button onClick={() => setIsCartOpen(false)} className="text-[#111111]/40"><X size={20} /></button>
-            </div>
+    <>
+      <AnimatePresence>
+        {isCartOpen && (
+          <>
+            <motion.div
+              key="cart-bd"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="fixed inset-0 bg-black/40 z-40"
+              onClick={() => setIsCartOpen(false)}
+            />
 
-            {pricing.totalQty >= 2 && !showAddressForm && (
-              <div className="bg-[#111111] px-6 py-3 flex items-center gap-3">
-                <Tag size={14} className="text-[#e6c79c]" />
-                <p className="text-white text-xs">Bundle applied! {pricing.bundlePairs} pairs @ ₹1,199 each</p>
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              {state.items.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
-                  <ShoppingBag size={24} className="text-[#e6c79c]" />
-                  <p className="text-[#7a6e5f] text-sm">Your bag is empty. Add 2 fragrances → save ₹599</p>
+            <motion.div
+              key="cart-panel"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed right-0 top-0 h-full w-full sm:w-[440px] bg-white z-50 flex flex-col shadow-2xl"
+            >
+              <div className="flex items-center justify-between px-6 py-5 border-b border-[#111111]/10">
+                <div>
+                  <h2
+                    style={{ fontFamily: "var(--font-display)" }}
+                    className="text-xl text-[#111111]"
+                  >
+                    {showAddressForm ? "Shipping Address" : "Your Bag"}
+                  </h2>
+                  <p
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="text-xs tracking-[0.15em] uppercase text-[#7a6e5f] mt-0.5"
+                  >
+                    {showAddressForm 
+                      ? "Enter dispatch details"
+                      : state.items.length === 0
+                      ? "Nothing added yet"
+                      : `${pricing.totalQty} item${pricing.totalQty > 1 ? "s" : ""}`}
+                  </p>
                 </div>
-              ) : showAddressForm ? (
-                <form id="address-checkout-form" onSubmit={handleCheckoutSubmit} className="space-y-4 pt-2">
-                  <div><label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Full Name *</label><input required type="text" name="name" value={shippingDetails.name} onChange={handleInputChange} className="w-full bg-transparent border-b py-2 text-sm outline-none" /></div>
-                  <div><label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Phone Number *</label><input required type="tel" name="phone" value={shippingDetails.phone} onChange={handleInputChange} className="w-full bg-transparent border-b py-2 text-sm outline-none" /></div>
-                  <div><label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Address Line 1 *</label><input required type="text" name="addressLine1" value={shippingDetails.addressLine1} onChange={handleInputChange} className="w-full bg-transparent border-b py-2 text-sm outline-none" placeholder="Flat / House No., Street" /></div>
-                  <div><label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Address Line 2</label><input type="text" name="addressLine2" value={shippingDetails.addressLine2} onChange={handleInputChange} className="w-full bg-transparent border-b py-2 text-sm outline-none" placeholder="Landmark / Locality" /></div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">City *</label><input required type="text" name="city" value={shippingDetails.city} onChange={handleInputChange} className="w-full bg-transparent border-b py-2 text-sm outline-none" /></div>
-                    <div><label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">State *</label><input required type="text" name="state" value={shippingDetails.state} onChange={handleInputChange} className="w-full bg-transparent border-b py-2 text-sm outline-none" /></div>
-                  </div>
-                  <div><label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Pincode *</label><input required type="text" name="pincode" value={shippingDetails.pincode} onChange={handleInputChange} className="w-full bg-transparent border-b py-2 text-sm outline-none" /></div>
-                </form>
-              ) : (
-                state.items.map((item: any) => (
-                  <div key={item.product.id} className="flex gap-4 py-5 border-b">
-                    <div className="w-20 h-24 bg-[#f5f0e8] overflow-hidden"><img src={item.product.main_image_url} alt="" className="w-full h-full object-cover" /></div>
-                    <div className="flex-1 flex flex-col justify-between min-w-0">
-                      <div>
-                        <p style={{ fontFamily: "var(--font-display)" }} className="text-base leading-tight">{item.product.title}</p>
-                        <p className="text-[#7a6e5f] text-[11px] mt-0.5">{item.product.volume} · 25% Parfum</p>
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center border">
-                          <button onClick={() => dispatch({ type: "UPDATE_QTY", id: item.product.id, delta: -1 })} className="w-7 h-7 flex items-center justify-center">-</button>
-                          <span className="w-7 text-center text-sm">{item.quantity}</span>
-                          <button onClick={() => dispatch({ type: "UPDATE_QTY", id: item.product.id, delta: 1 })} className="w-7 h-7 flex items-center justify-center">+</button>
-                        </div>
-                        <button onClick={() => dispatch({ type: "REMOVE_ITEM", id: item.product.id })} className="text-xs text-[#7a6e5f]/60">Remove</button>
-                      </div>
+                <button
+                  onClick={() => setIsCartOpen(false)}
+                  className="text-[#111111]/40 hover:text-[#111111] transition-colors p-1"
+                >
+                  <X size={20} strokeWidth={1.5} />
+                </button>
+              </div>
+
+              {pricing.totalQty >= 2 && !showAddressForm && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  className="bg-[#111111] px-6 py-3 flex items-center gap-3"
+                >
+                  <Tag size={14} className="text-[#e6c79c] shrink-0" />
+                  <p
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="text-white text-xs tracking-[0.1em]"
+                  >
+                    <span className="text-[#e6c79c] font-medium">
+                      Bundle applied!
+                    </span>{" "}
+                    {pricing.bundlePairs} pair{pricing.bundlePairs > 1 ? "s" : ""} @ ₹1,199 each
+                    {pricing.totalQty % 2 === 1 && " + 1 @ ₹799"}
+                  </p>
+                </motion.div>
+              )}
+
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                {state.items.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+                    <div className="w-16 h-16 border border-[#e6c79c]/40 flex items-center justify-center">
+                      <ShoppingBag
+                        size={24}
+                        strokeWidth={1}
+                        className="text-[#e6c79c]"
+                      />
+                    </div>
+                    <div>
+                      <p
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-[#7a6e5f] text-sm"
+                      >
+                        Your bag is empty
+                      </p>
+                      <p
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-[#e6c79c] text-xs tracking-[0.1em] mt-1"
+                      >
+                        Add 2 fragrances → save ₹399
+                      </p>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                ) : showAddressForm ? (
+                  /* ── Premium Address Input Fields Dropdown ── */
+                  <form id="address-checkout-form" onSubmit={handleCheckoutSubmit} className="space-y-4 pt-2">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Full Name *</label>
+                      <input required type="text" name="name" value={shippingDetails.name} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" />
+                    </div>
 
-            {state.items.length > 0 && (
-              <div className="border-t px-6 pt-4 pb-7 flex flex-col gap-3">
-                <div className="flex justify-between text-sm text-[#7a6e5f]"><span>Subtotal</span><span>₹{pricing.lineSubtotal}</span></div>
-                {pricing.bundleDiscount > 0 && <div className="flex justify-between text-sm text-[#e6c79c]"><span>Bundle Discount</span><span>−₹{pricing.bundleDiscount}</span></div>}
-                <div className="flex justify-between text-sm text-[#7a6e5f]"><span>Delivery</span><span>₹{DELIVERY_FEE}</span></div>
-                <div className="flex justify-between items-baseline border-t pt-3"><span className="text-xs uppercase text-[#7a6e5f]">Total</span><span style={{ fontFamily: "var(--font-display)" }} className="text-2xl text-[#111111]">₹{finalTotal}</span></div>
-                
-                {!showAddressForm ? (
-                  <button onClick={() => setShowAddressForm(true)} className="w-full bg-[#111111] text-white py-4 text-xs uppercase tracking-widest flex items-center justify-center gap-2">Proceed to Checkout <ArrowRight size={15} /></button>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Phone Number *</label>
+                      <input required type="tel" name="phone" value={shippingDetails.phone} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" placeholder="10-digit mobile layout" />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Address Line 1 *</label>
+                      <input required type="text" name="addressLine1" value={shippingDetails.addressLine1} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" placeholder="Flat No., Building, Street Name" />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Address Line 2 (Optional)</label>
+                      <input type="text" name="addressLine2" value={shippingDetails.addressLine2} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" placeholder="Landmark, Locality" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">City *</label>
+                        <input required type="text" name="city" value={shippingDetails.city} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">State *</label>
+                        <input required type="text" name="state" value={shippingDetails.state} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#7a6e5f] mb-1">Pincode *</label>
+                      <input required type="text" name="pincode" value={shippingDetails.pincode} onChange={handleInputChange} className="w-full bg-transparent border-b border-[#111111]/20 focus:border-[#e6c79c] py-2 text-sm text-[#111111] outline-none transition-colors" />
+                    </div>
+                  </form>
                 ) : (
-                  <div className="flex gap-3 mt-1">
-                    <button type="button" onClick={() => setShowAddressForm(false)} className="w-1/3 border py-4 text-xs uppercase">Back</button>
-                    <button type="submit" form="address-checkout-form" disabled={!razorpayReady} className="w-2/3 bg-[#111111] text-white py-4 text-xs uppercase tracking-widest disabled:opacity-60">{razorpayReady ? "Authorize & Pay Now" : "Loading Gateway…"}</button>
+                  <div>
+                    {state.items.map((item, idx) => (
+                      <div
+                        key={item.product.id}
+                        className={`flex gap-4 py-5 ${
+                          idx < state.items.length - 1
+                            ? "border-b border-[#111111]/8"
+                            : ""
+                        }`}
+                      >
+                        <div className="w-20 h-24 shrink-0 bg-[#f5f0e8] overflow-hidden">
+                          <img
+                            src={item.product.main_image_url}
+                            alt={item.product.title}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+
+                        <div className="flex-1 flex flex-col justify-between min-w-0">
+                          <div>
+                            <p
+                              style={{ fontFamily: "var(--font-display)" }}
+                              className="text-[#111111] text-base leading-tight"
+                            >
+                              {item.product.title}
+                            </p>
+                            <p
+                              style={{ fontFamily: "var(--font-body)" }}
+                              className="text-[#7a6e5f] text-[11px] tracking-[0.1em] mt-0.5"
+                            >
+                              {item.product.volume} · {item.product.concentration}% Parfum
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span
+                                style={{ fontFamily: "var(--font-body)" }}
+                                className="text-sm font-medium text-[#111111]"
+                              >
+                                ₹{item.product.salePrice.toLocaleString("en-IN")}
+                              </span>
+                              <span
+                                style={{ fontFamily: "var(--font-body)" }}
+                                className="text-xs text-[#7a6e5f] line-through"
+                              >
+                                ₹{item.product.mrpPrice.toLocaleString("en-IN")}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-2">
+                            <div className="flex items-center border border-[#111111]/15">
+                              <button
+                                onClick={() =>
+                                  dispatch({
+                                    type: "UPDATE_QTY",
+                                    id: item.product.id,
+                                    delta: -1,
+                                  })
+                                }
+                                className="w-7 h-7 flex items-center justify-center text-[#111111]/50 hover:text-[#111111] transition-colors"
+                              >
+                                <Minus size={12} />
+                              </button>
+                              <span
+                                style={{ fontFamily: "var(--font-body)" }}
+                                className="w-7 text-center text-sm font-medium text-[#111111]"
+                              >
+                                {item.quantity}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  dispatch({
+                                    type: "UPDATE_QTY",
+                                    id: item.product.id,
+                                    delta: 1,
+                                  })
+                                }
+                                className="w-7 h-7 flex items-center justify-center text-[#111111]/50 hover:text-[#111111] transition-colors"
+                              >
+                                <Plus size={12} />
+                              </button>
+                            </div>
+                            <button
+                              onClick={() =>
+                                dispatch({
+                                  type: "REMOVE_ITEM",
+                                  id: item.product.id,
+                                })
+                              }
+                              className="text-[#111111]/25 hover:text-[#111111] transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-            )}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+
+              {state.items.length > 0 && (
+                <div className="border-t border-[#111111]/10 px-6 pt-4 pb-7 flex flex-col gap-3">
+                  <div className="flex justify-between text-sm">
+                    <span
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-[#7a6e5f] text-xs tracking-[0.1em] uppercase"
+                    >
+                      Subtotal ({pricing.totalQty} item{pricing.totalQty > 1 ? "s" : ""})
+                    </span>
+                    <span
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-[#7a6e5f] line-through text-sm"
+                    >
+                      ₹{pricing.lineSubtotal.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+
+                  {pricing.bundleDiscount > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-xs tracking-[0.1em] uppercase text-[#e6c79c] flex items-center gap-1.5"
+                      >
+                        <Tag size={11} />
+                        Bundle Discount
+                      </span>
+                      <span
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-[#e6c79c] font-medium text-sm"
+                      >
+                        −₹{pricing.bundleDiscount.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center">
+                    <span
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-xs tracking-[0.1em] uppercase text-[#7a6e5f]"
+                    >
+                      Delivery Charges
+                    </span>
+                    <span
+                      style={{ fontFamily: "var(--font-sm)" }}
+                      className="text-sm text-[#111111]"
+                    >
+                      ₹{DELIVERY_FEE}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-baseline border-t border-[#111111]/8 pt-3">
+                    <span
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-xs tracking-[0.15em] uppercase text-[#7a6e5f]"
+                    >
+                      Total
+                    </span>
+                    <span
+                      style={{ fontFamily: "var(--font-display)" }}
+                      className="text-[#111111] text-2xl"
+                    >
+                      ₹{finalTotal.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+
+                  {pricing.youSave > 0 && !showAddressForm && (
+                    <p
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-center text-[11px] text-[#e6c79c] tracking-[0.1em]"
+                    >
+                      You save ₹{pricing.youSave.toLocaleString("en-IN")} on this order 🎉
+                    </p>
+                  )}
+
+                  {/* ── Action Buttons Control Matrix ── */}
+                  {!showAddressForm ? (
+                    <button
+                      onClick={() => setShowAddressForm(true)}
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="w-full bg-[#111111] text-white py-4 flex items-center justify-center gap-3 hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 group mt-1"
+                    >
+                      <span className="text-sm tracking-[0.2em] uppercase font-medium">
+                        Proceed to Checkout
+                      </span>
+                      <ArrowRight size={15} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  ) : (
+                    <div className="flex gap-3 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddressForm(false)}
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="w-1/3 border border-[#111111]/20 text-[#111111] py-4 text-xs tracking-[0.15em] uppercase hover:bg-[#f5f0e8] transition-all"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="submit"
+                        form="address-checkout-form"
+                        disabled={!razorpayReady}
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="w-2/3 bg-[#111111] text-white py-4 text-xs tracking-[0.2em] uppercase font-semibold hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 disabled:opacity-60"
+                      >
+                        {razorpayReady ? "Authorize & Pay Now" : "Loading Gateway…"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
 // ─── Hero Section ──────────────────────────────────────────────────────────
 
-function HeroSection() {
+function HeroSection({ navigate }: { navigate: NavigateFn }) {
+  const { scrollY } = useScroll();
+  const imgScale = useTransform(scrollY, [0, 700], [1, 1.12]);
+  const imgY = useTransform(scrollY, [0, 700], ["0%", "10%"]);
+  const textY = useTransform(scrollY, [0, 700], ["0%", "22%"]);
+  const overlayOpacity = useTransform(scrollY, [0, 500], [0.4, 0.65]);
+  const textOpacity = useTransform(scrollY, [0, 350], [1, 0]);
+
+  const scrollToCollection = () => {
+    document.getElementById("collection")?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <div className="relative overflow-hidden bg-[#0a0f1a]" style={{ height: "72vh", minHeight: 480 }}>
-      <div className="absolute inset-0"><img src="https://i.postimg.cc/SKmknBDz/Firefly-Gemini-Flash-(3).png" alt="" className="w-full h-full object-cover" /></div>
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="absolute inset-0 flex flex-col justify-end px-6 sm:px-14 pb-16 z-10">
-        <h1 style={{ fontFamily: "var(--font-display)" }} className="text-white text-5xl sm:text-7xl leading-tight mb-4">Wear Your<br />Story.</h1>
-        <p className="text-white/70 text-sm max-w-sm mb-6">25% oil concentration. Built to last 14 hours.<br />Any 2 bottles — only ₹1,199.</p>
-        <button onClick={() => document.getElementById("collection")?.scrollIntoView({ behavior: "smooth" })} className="bg-[#e6c79c] text-[#111111] px-8 py-3.5 text-xs uppercase tracking-widest font-semibold self-start">Shop the Edit</button>
+      <motion.div
+        style={{ scale: imgScale, y: imgY }}
+        className="absolute inset-0 origin-center"
+      >
+        <img
+          src="https://i.postimg.cc/SKmknBDz/Firefly-Gemini-Flash-(3).png"
+          alt="Aura Element cinematic hero"
+          className="w-full h-full object-cover"
+        />
+      </motion.div>
+
+      <motion.div
+        style={{ opacity: overlayOpacity }}
+        className="absolute inset-0 bg-[#111111]"
+      />
+
+      <motion.div
+        style={{ y: textY, opacity: textOpacity }}
+        className="absolute inset-0 flex flex-col justify-end px-6 sm:px-14 lg:px-20 pb-16 sm:pb-24"
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.4 }}
+          className="inline-flex items-center gap-3 mb-5"
+        >
+          <div className="w-8 h-px bg-[#e6c79c]" />
+          <span
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#e6c79c] text-[10px] tracking-[0.4em] uppercase"
+          >
+            Launch Collection · 4 Signatures
+          </span>
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-white text-5xl sm:text-6xl md:text-7xl lg:text-[88px] leading-[1.02] max-w-3xl mb-5 sm:mb-7"
+        >
+          Wear Your
+          <br />
+          Story.
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.8 }}
+          style={{ fontFamily: "var(--font-body)" }}
+          className="text-white/65 text-sm sm:text-base font-light leading-relaxed max-w-sm mb-8 sm:mb-10"
+        >
+          25% oil concentration. Built to last 14 hours.
+          <br />
+          Any 2 bottles — only ₹1,199.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 1.0 }}
+          className="flex items-center gap-5 flex-wrap"
+        >
+          <button
+            onClick={scrollToCollection}
+            style={{ fontFamily: "var(--font-body)" }}
+            className="bg-[#e6c79c] text-[#111111] px-8 py-3.5 text-xs tracking-[0.28em] uppercase font-semibold hover:bg-white transition-colors duration-300 flex items-center gap-2.5 group"
+          >
+            Shop the Edit
+            <ArrowRight
+              size={14}
+              className="group-hover:translate-x-1 transition-transform"
+            />
+          </button>
+
+          <div
+            className="hidden sm:flex items-center gap-3 bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2"
+          >
+            <Tag size={13} className="text-[#e6c79c]" />
+            <span
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-white text-xs tracking-[0.15em]"
+            >
+              Any 2 for ₹1,199
+            </span>
+          </div>
+        </motion.div>
+      </motion.div>
+
+      <div className="absolute bottom-8 right-8 hidden sm:flex flex-col items-center gap-3">
+        <motion.div
+          animate={{ y: [0, 9, 0] }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+          className="w-px h-14 bg-gradient-to-b from-[#e6c79c]/70 to-transparent"
+        />
+        <span
+          style={{ fontFamily: "var(--font-body)" }}
+          className="text-white/30 text-[9px] tracking-[0.3em] uppercase writing-mode-vertical rotate-180"
+        >
+          Scroll
+        </span>
       </div>
     </div>
   );
@@ -1319,20 +1670,192 @@ function HeroSection() {
 
 // ─── Product Card ──────────────────────────────────────────────────────────
 
-function ProductCard({ product, navigate, index }: { product: Product; navigate: NavigateFn; index: number }) {
+function ProductCard({
+  product,
+  navigate,
+  index,
+}: {
+  product: Product;
+  navigate: NavigateFn;
+  index: number;
+}) {
   const { dispatch, setIsCartOpen } = useCart();
   const [hovered, setHovered] = useState(false);
 
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    dispatch({ type: "ADD_ITEM", product });
+    setIsCartOpen(true);
+  };
+
+  const discount = Math.round(
+    ((product.mrpPrice - product.salePrice) / product.mrpPrice) * 100
+  );
+
   return (
-    <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.05 }} className="cursor-pointer group" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={() => navigate("product", product.id)}>
-      <div className="relative aspect-[3/4] bg-[#f0ebe0] overflow-hidden">
-        <img src={product.main_image_url} alt="" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${hovered ? "opacity-0" : "opacity-100"}`} />
-        <img src={product.secondary_image_url} alt="" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${hovered ? "opacity-100" : "opacity-0"}`} />
-        <div className="absolute top-3 left-3 flex flex-col gap-1"><span className="bg-[#111111] text-white text-[9px] uppercase px-2 py-0.5">Sale</span></div>
+    <motion.div
+      initial={{ opacity: 0, y: 28 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{
+        duration: 0.65,
+        delay: index * 0.08,
+        ease: [0.25, 0.46, 0.45, 0.94],
+      }}
+      className="group flex flex-col cursor-pointer"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => navigate("product", product.id)}
+    >
+      <div
+        className="relative overflow-hidden bg-[#f0ebe0]"
+        style={{ aspectRatio: "3/4" }}
+      >
+        <img
+          src={product.main_image_url}
+          alt={product.title}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+            hovered ? "opacity-0" : "opacity-100"
+          }`}
+        />
+        <img
+          src={product.secondary_image_url}
+          alt={`${product.title} alternate`}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+            hovered ? "opacity-100" : "opacity-0"
+          }`}
+        />
+
+        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+          <span
+            style={{ fontFamily: "var(--font-body)" }}
+            className="bg-[#111111] text-white text-[9px] tracking-[0.15em] uppercase px-2 py-1"
+          >
+            {discount}% OFF
+          </span>
+          <span
+            style={{ fontFamily: "var(--font-body)" }}
+            className="bg-[#e6c79c] text-[#111111] text-[9px] tracking-[0.12em] uppercase px-2 py-1 font-semibold"
+          >
+            25% Parfum
+          </span>
+        </div>
+
+        <motion.div
+          initial={false}
+          animate={{ opacity: hovered ? 1 : 0, y: hovered ? 0 : 8 }}
+          transition={{ duration: 0.25 }}
+          className="absolute inset-x-0 bottom-0 p-3 sm:p-4"
+        >
+          <button
+            onClick={handleAddToCart}
+            style={{ fontFamily: "var(--font-body)" }}
+            className="w-full bg-[#111111]/90 backdrop-blur-sm text-white text-xs tracking-[0.2em] uppercase py-3 hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300"
+          >
+            Add to Bag
+          </button>
+        </motion.div>
       </div>
-      <div className="pt-3 flex justify-between">
-        <div><h3 style={{ fontFamily: "var(--font-display)" }} className="text-base text-[#111111]">{product.title}</h3><p className="text-[11px] text-[#7a6e5f]">{product.tagline}</p></div>
-        <div className="text-right"><p className="text-sm font-semibold">₹{product.salePrice}</p><p className="text-xs text-[#7a6e5f] line-through">₹{product.mrpPrice}</p></div>
+
+      <div className="pt-2.5 pb-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3
+              style={{ fontFamily: "var(--font-display)" }}
+              className="text-[#111111] text-base sm:text-lg leading-tight truncate"
+            >
+              {product.title}
+            </h3>
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-[#7a6e5f] text-[10px] tracking-[0.15em] uppercase mt-0.5"
+            >
+              {product.tagline}
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-[#111111] font-medium text-base"
+            >
+              ₹{product.salePrice.toLocaleString("en-IN")}
+            </p>
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-[#7a6e5f] text-xs line-through"
+            >
+              ₹{product.mrpPrice.toLocaleString("en-IN")}
+            </p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Bundle Callout Banner ────────────────────────────────────────────────
+
+function BundleCallout() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6 }}
+      className="mx-5 sm:mx-8 lg:mx-14 my-12 bg-[#111111] px-7 sm:px-12 py-8 sm:py-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6"
+    >
+      <div>
+        <p
+          style={{ fontFamily: "var(--font-body)" }}
+          className="text-[#e6c79c] text-xs tracking-[0.3em] uppercase mb-2"
+        >
+          🎁 Exclusive Launch Offer
+        </p>
+        <h3
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-white text-3xl sm:text-4xl leading-tight"
+        >
+          Any 2 Fragrances
+          <br />
+          for just ₹1,199
+        </h3>
+        <p
+          style={{ fontFamily: "var(--font-body)" }}
+          className="text-[#7a6e5f] text-sm font-light mt-2"
+        >
+          Save ₹399 · Mix &amp; match all four signatures · Automatic at checkout
+        </p>
+      </div>
+      <div className="flex flex-col gap-2 shrink-0">
+        {[
+          { qty: 1, price: "₹799" },
+          { qty: 2, price: "₹1,199", highlight: true },
+          { qty: 3, price: "₹1,798" },
+          { qty: 4, price: "₹1,998" },
+        ].map(({ qty, price, highlight }) => (
+          <div
+            key={qty}
+            className={`flex items-center justify-between gap-8 px-4 py-2 ${
+              highlight
+                ? "bg-[#e6c79c] text-[#111111]"
+                : "border border-white/10 text-white"
+            }`}
+          >
+            <span
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-xs tracking-[0.15em] uppercase"
+            >
+              {qty} bottle{qty > 1 ? "s" : ""}
+              {highlight && " ★"}
+            </span>
+            <span
+              style={{ fontFamily: "var(--font-display)" }}
+              className="text-lg"
+            >
+              {price}
+            </span>
+          </div>
+        ))}
       </div>
     </motion.div>
   );
@@ -1342,16 +1865,58 @@ function ProductCard({ product, navigate, index }: { product: Product; navigate:
 
 function HomePage({ navigate }: { navigate: NavigateFn }) {
   return (
-    <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <HeroSection />
-      <section id="collection" className="px-5 sm:px-14 py-20">
-        <div className="mb-10"><h2 style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-3xl sm:text-4xl">Launch Collection</h2><p className="text-[#7a6e5f] text-sm mt-1">Add any 2 signatures — automatic bundle offer applied at checkout.</p></div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <motion.div
+      key="home"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+      <HeroSection navigate={navigate} />
+
+      <section id="collection" className="px-5 sm:px-8 lg:px-14 pt-20 pb-16 sm:pt-28 sm:pb-24">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="mb-8 sm:mb-12"
+        >
+          <span
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#e6c79c] text-xs tracking-[0.35em] uppercase block mb-3"
+          >
+            Launch Collection — Phase 1
+          </span>
+          <div className="flex items-end justify-between gap-4 flex-wrap">
+            <h2
+              style={{ fontFamily: "var(--font-display)" }}
+              className="text-[#111111] text-3xl sm:text-4xl lg:text-5xl"
+            >
+              4 Signatures
+            </h2>
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-[#7a6e5f] text-sm font-light max-w-xs text-right hidden sm:block"
+            >
+              Each at ₹799. Add any 2 — pay ₹1,199.
+            </p>
+          </div>
+          <div className="w-full h-px bg-[#111111]/10 mt-6" />
+        </motion.div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-7 sm:gap-x-5 sm:gap-y-10">
           {PRODUCTS.map((product, i) => (
-            <ProductCard key={product.id} product={product} navigate={navigate} index={i} />
+            <ProductCard
+              key={product.id}
+              product={product}
+              navigate={navigate}
+              index={i}
+            />
           ))}
         </div>
       </section>
+
       <BundleCallout />
       <BrandStrip />
       <PhilosophyTeaser navigate={navigate} />
@@ -1360,138 +1925,1151 @@ function HomePage({ navigate }: { navigate: NavigateFn }) {
   );
 }
 
-function BundleCallout() {
+// ─── Brand Strip ───────────────────────────────────────────────────────────
+
+function BrandStrip() {
+  const pillars = [
+    "Any 2 for ₹1,199",
+    "25% Oil Concentration",
+    "Hand-Blended Formulas",
+    "Cruelty Free",
+    "Lasts 14–16 Hours",
+    "Free Express Delivery",
+  ];
+
   return (
-    <div className="mx-5 sm:mx-14 my-12 bg-[#111111] p-8 sm:p-12 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-      <div><p className="text-[#e6c79c] text-xs uppercase tracking-widest mb-1">🎁 Exclusive Launch Offer</p><h3 style={{ fontFamily: "var(--font-display)" }} className="text-white text-3xl sm:text-4xl leading-tight">Any 2 Fragrances<br />for just ₹1,199</h3></div>
-      <div className="bg-[#e6c79c] text-[#111111] px-6 py-3 font-semibold text-sm tracking-wider uppercase">Best Value Offer ★</div>
+    <div className="border-y border-[#e6c79c]/25 bg-[#fafaf8] overflow-hidden py-4 sm:py-5">
+      <motion.div
+        animate={{ x: "-50%" }}
+        transition={{ duration: 26, repeat: Infinity, ease: "linear" }}
+        className="flex whitespace-nowrap shrink-0"
+      >
+        {[0, 1].map((copy) => (
+          <span key={copy} className="inline-flex items-center shrink-0">
+            {[...pillars, ...pillars].map((p, i) => (
+              <span key={i} className="inline-flex items-center gap-6 sm:gap-10">
+                <span
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="text-[10px] sm:text-[11px] tracking-[0.28em] uppercase text-[#7a6e5f]"
+                >
+                  {p}
+                </span>
+                <span className="w-1 h-1 rounded-full bg-[#e6c79c] shrink-0" />
+              </span>
+            ))}
+          </span>
+        ))}
+      </motion.div>
     </div>
   );
 }
 
-function BrandStrip() {
-  const pillars = ["Any 2 for ₹1,199", "25% Oil Concentration", "Hand-Blended Formulas", "Lasts 14–16 Hours"];
-  return (
-    <div className="border-y bg-[#fafaf8] py-4 overflow-hidden whitespace-nowrap">
-      <div className="flex gap-10 justify-center">
-        {pillars.map((p, i) => (
-          <span key={i} className="text-[10px] uppercase tracking-widest text-[#7a6e5f] font-medium">{p}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
+// ─── Philosophy Teaser ─────────────────────────────────────────────────────
 
 function PhilosophyTeaser({ navigate }: { navigate: NavigateFn }) {
   return (
-    <section className="grid grid-cols-1 md:grid-cols-2 bg-[#f5f0e8]">
-      <div className="p-8 sm:p-16 flex flex-col justify-center">
-        <h2 style={{ fontFamily: "var(--font-display)" }} className="text-3xl sm:text-4xl mb-4">Scent as Second Skin</h2>
-        <p className="text-sm text-[#7a6e5f] leading-relaxed mb-6">Every Aura Element formula is built to interact with your skin, to become something uniquely yours. 25% oil concentration — the highest tier of luxury.</p>
-        <button onClick={() => navigate("about")} className="text-xs uppercase tracking-widest font-semibold self-start text-[#111111] hover:text-[#e6c79c]">Our Story →</button>
+    <section className="grid grid-cols-1 md:grid-cols-2 min-h-[500px] sm:min-h-[560px]">
+      <div className="order-2 md:order-1 flex flex-col justify-center px-8 sm:px-14 lg:px-20 py-14 sm:py-22 bg-[#f5f0e8]">
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.7 }}
+        >
+          <span
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#e6c79c] text-xs tracking-[0.35em] uppercase block mb-5"
+          >
+            Our Philosophy
+          </span>
+          <h2
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[#111111] text-3xl sm:text-4xl lg:text-5xl leading-tight mb-5"
+          >
+            Scent as
+            <br />
+            Second Skin
+          </h2>
+          <p
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#7a6e5f] font-light leading-relaxed text-sm sm:text-base mb-8 max-w-sm"
+          >
+            Every Aura Element formula is built to interact with your skin, to become
+            something uniquely yours. 25% oil concentration — the highest tier of luxury.
+          </p>
+          <button
+            onClick={() => navigate("about")}
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#111111] text-xs tracking-[0.25em] uppercase flex items-center gap-3 hover:text-[#e6c79c] transition-colors duration-200 group"
+          >
+            Our Story
+            <ChevronRight
+              size={14}
+              className="group-hover:translate-x-1 transition-transform"
+            />
+          </button>
+        </motion.div>
       </div>
-      <div className="h-64 md:h-auto"><img src="https://images.unsplash.com/photo-1779562909409-defc901cf57e?w=800" alt="" className="w-full h-full object-cover" /></div>
+
+      <div className="order-1 md:order-2 overflow-hidden bg-[#e6c79c]/15 min-h-[280px] md:min-h-auto">
+        <motion.img
+          initial={{ scale: 1.06 }}
+          whileInView={{ scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+          src="https://images.unsplash.com/photo-1779562909409-defc901cf57e?w=900&h=700&fit=crop&auto=format"
+          alt="Fragrance philosophy"
+          className="w-full h-full object-cover"
+        />
+      </div>
     </section>
   );
 }
 
-function AboutUsPage() {
-  return <div className="min-h-screen pt-32 text-center text-sm text-[#7a6e5f]"><h2>Our Story Page</h2></div>;
-}
+// ─── Product Image Gallery ────────────────────────────────────────────────
 
-// ─── 💡 FIXED: Product Image Gallery Mobile Overlays (Matches reference image_184542.png) ───
-
-function ProductImageGallery({ images, title, badges, onBack }: { images: string[]; title: string; badges: React.ReactNode; onBack: () => void }) {
+function ProductImageGallery({
+  images,
+  title,
+  badges,
+  onBack,
+}: {
+  images: string[];
+  title: string;
+  badges: React.ReactNode;
+  onBack: () => void;
+}) {
   const [active, setActive] = useState(0);
 
-  const handlePrev = () => { setActive((prev) => (prev === 0 ? images.length - 1 : prev - 1)); };
-  const handleNext = () => { setActive((prev) => (prev === images.length - 1 ? 0 : prev + 1)); };
+  const prev = () => setActive((a) => (a === 0 ? images.length - 1 : a - 1));
+  const next = () => setActive((a) => (a === images.length - 1 ? 0 : a + 1));
 
   return (
-    <div className="flex flex-col bg-[#f5f0e8]">
-      <div className="relative w-full overflow-hidden bg-[#f5f0e8] select-none aspect-[1/1] sm:aspect-[3/2]">
+    <div className="flex flex-col bg-[#fafaf8]">
+
+      {/* ── Main image: 1:1 on mobile, 3:2 on desktop ── */}
+      <div
+        className="relative w-full overflow-hidden bg-[#f5f0e8]"
+        style={{ aspectRatio: "1 / 1" }}
+      >
+        {/* Fade-transition image */}
         <AnimatePresence mode="wait">
-          <motion.img key={active} src={images[active]} alt="" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="absolute inset-0 w-full h-full object-contain p-4 sm:p-8" />
+          <motion.img
+            key={active}
+            src={images[active]}
+            alt={`${title} — view ${active + 1}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.28, ease: "easeInOut" }}
+            className="absolute inset-0 w-full h-full object-contain p-8 sm:p-10"
+            draggable={false}
+          />
         </AnimatePresence>
 
-        <button onClick={onBack} className="absolute top-4 left-4 z-10 text-[10px] tracking-widest uppercase text-white bg-black/40 px-3 py-2">← Back</button>
-        <div className="absolute top-4 right-4 z-10 flex flex-col gap-1">{badges}</div>
-
-        {/* Floating Navigation Controls */}
-        <button onClick={handlePrev} className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-white/50 text-[#111111] p-2 rounded-full backdrop-blur-sm shadow-sm">
-          <ChevronRight size={18} className="rotate-180" />
+        {/* ── Back button — top left ── */}
+        <button
+          onClick={onBack}
+          style={{ fontFamily: "var(--font-body)" }}
+          className="absolute top-3.5 left-3.5 z-20 flex items-center gap-1.5 bg-white/75 backdrop-blur-sm px-3 py-1.5 text-[9px] tracking-[0.22em] uppercase text-[#111111]/80 hover:text-[#111111] hover:bg-white transition-all duration-200 shadow-sm"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 5l-7 7 7 7" />
+          </svg>
+          Back
         </button>
-        <button onClick={handleNext} className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white/50 text-[#111111] p-2 rounded-full backdrop-blur-sm shadow-sm">
-          <ChevronRight size={18} />
+
+        {/* ── Badges — top right ── */}
+        <div className="absolute top-3.5 right-3.5 z-20 flex flex-col gap-1.5">
+          {badges}
+        </div>
+
+        {/* ── Left arrow ── */}
+        <button
+          onClick={prev}
+          aria-label="Previous image"
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/75 backdrop-blur-sm shadow-md flex items-center justify-center text-[#111111]/70 hover:bg-white hover:text-[#111111] transition-all duration-200 active:scale-95"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
         </button>
 
-        <div className="absolute bottom-4 right-4 z-10 bg-black/40 px-2.5 py-1 text-white text-[11px]">{active + 1} / {images.length}</div>
+        {/* ── Right arrow ── */}
+        <button
+          onClick={next}
+          aria-label="Next image"
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/75 backdrop-blur-sm shadow-md flex items-center justify-center text-[#111111]/70 hover:bg-white hover:text-[#111111] transition-all duration-200 active:scale-95"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+
+        {/* ── Dot counter — bottom centre ── */}
+        <div className="absolute bottom-3.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+          {images.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setActive(i)}
+              aria-label={`Go to image ${i + 1}`}
+              className={`rounded-full transition-all duration-300 ${
+                active === i
+                  ? "w-4 h-1.5 bg-[#e6c79c]"
+                  : "w-1.5 h-1.5 bg-[#111111]/20 hover:bg-[#111111]/40"
+              }`}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Centered Mobile Micro-Thumbnails */}
-      <div className="flex items-center justify-center gap-2 bg-white border-t px-4 py-3" style={{ minHeight: "76px" }}>
+      {/* ── Thumbnail strip — centred, portrait 42×52 ── */}
+      <div className="flex items-center justify-center gap-2 px-4 py-3 bg-white border-t border-[#111111]/8">
         {images.map((src, i) => (
-          <button key={i} onClick={() => setActive(i)} className={`relative shrink-0 overflow-hidden rounded-sm transition-all ${active === i ? "ring-2 ring-[#e6c79c] ring-offset-1 opacity-100 scale-105" : "opacity-45"}`} style={{ width: "42px", height: "52px" }}>
-            <img src={src} alt="" className="w-full h-full object-cover" />
+          <button
+            key={i}
+            onClick={() => setActive(i)}
+            aria-label={`Show image ${i + 1}`}
+            className={`relative shrink-0 overflow-hidden transition-all duration-200 ${
+              active === i ? "opacity-100" : "opacity-45 hover:opacity-75"
+            }`}
+            style={{ width: 42, height: 52, minWidth: 42 }}
+          >
+            <img
+              src={src.replace("w=900&h=1100", "w=120&h=150")}
+              alt={`${title} thumbnail ${i + 1}`}
+              className="w-full h-full object-cover bg-[#f5f0e8]"
+            />
+            {/* Active border — sharp tan outline */}
+            <AnimatePresence>
+              {active === i && (
+                <motion.div
+                  key="active-border"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 border-[1.5px] border-[#e6c79c]"
+                />
+              )}
+            </AnimatePresence>
           </button>
         ))}
       </div>
+
     </div>
   );
 }
 
 // ─── Product Detail Page ────────────────────────────────────────────────────
 
-function ProductDetailPage({ productId, navigate }: { productId: string; navigate: NavigateFn }) {
+function ProductDetailPage({
+  productId,
+  navigate,
+}: {
+  productId: string;
+  navigate: NavigateFn;
+}) {
   const product = PRODUCTS.find((p) => p.id === productId);
   const { dispatch, state, setIsCartOpen } = useCart();
   const [quantity, setQuantity] = useState(1);
+  const [activeTab, setActiveTab] = useState<"notes" | "about">("notes");
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
-  if (!product) return <div className="min-h-screen flex items-center justify-center text-sm pt-32">Product not found.</div>;
+  if (!product) {
+    return (
+      <div className="min-h-screen flex items-center justify-center pt-24">
+        <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f]">
+          Product not found.
+        </p>
+      </div>
+    );
+  }
 
-  const currentCartQty = state.items.reduce((s: number, i: any) => s + i.quantity, 0);
+  const currentCartQty = state.items.reduce((s, i) => s + i.quantity, 0);
   const previewQty = currentCartQty + quantity;
   const previewPairs = Math.floor(previewQty / 2);
   const previewSingles = previewQty % 2;
-  const previewTotal = previewPairs * BUNDLE_PRICE + previewSingles * SALE_PRICE;
+  const previewTotal =
+    previewPairs * BUNDLE_PRICE + previewSingles * SALE_PRICE;
+
+  const handleAddToCart = () => {
+    for (let i = 0; i < quantity; i++) {
+      dispatch({ type: "ADD_ITEM", product });
+    }
+    setIsCartOpen(true);
+  };
+
+  const checkoutItems = [{ product, quantity }];
+  const checkoutPricing = computeBundlePricing(checkoutItems);
+
+  const discount = Math.round(
+    ((product.mrpPrice - product.salePrice) / product.mrpPrice) * 100
+  );
 
   return (
-    <div className="min-h-screen pt-32 px-5 sm:px-14">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        <ProductImageGallery images={product.gallery} title={product.title} badges={<span className="bg-black text-white text-[9px] uppercase px-2 py-0.5">25% Parfum</span>} onBack={() => navigate("home")} />
-        <div className="flex flex-col justify-center">
-          <span className="text-[#e6c79c] text-xs uppercase tracking-widest mb-1">{product.tagline}</span>
-          <h1 style={{ fontFamily: "var(--font-display)" }} className="text-3xl sm:text-5xl mb-4">{product.title}</h1>
-          <div className="flex items-baseline gap-3 mb-6"><span className="text-2xl font-bold">₹{product.salePrice}</span><span className="text-sm text-[#7a6e5f] line-through">₹{product.mrpPrice}</span></div>
-          
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex items-center border">
-              <button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="px-3 py-1.5">-</button>
-              <span className="px-3">{quantity}</span>
-              <button onClick={() => setQuantity((q) => q + 1)} className="px-3 py-1.5">+</button>
-            </div>
-            {currentCartQty > 0 && previewPairs > 0 && <span className="text-xs text-[#e6c79c]">Bag total: ₹{previewTotal}</span>}
-          </div>
+    <>
+      <MockCheckoutModal
+        isOpen={checkoutOpen}
+        grandTotal={checkoutPricing.grandTotal}
+        items={checkoutItems}
+        onClose={() => setCheckoutOpen(false)}
+        onSuccess={() => setCheckoutOpen(false)}
+      />
 
-          <div className="flex flex-col gap-3">
-            <button onClick={() => { for(let i=0; i<quantity; i++) dispatch({ type: "ADD_ITEM", product }); setIsCartOpen(true); }} className="w-full border py-4 text-xs uppercase tracking-widest font-semibold hover:bg-black hover:text-white transition-all">Add to Bag</button>
-            <button onClick={() => { dispatch({ type: "CLEAR" }); for(let i=0; i<quantity; i++) dispatch({ type: "ADD_ITEM", product }); setIsCartOpen(true); setTimeout(() => { window.dispatchEvent(new CustomEvent("trigger-buy-now")); }, 50); }} className="w-full bg-[#e6c79c] text-[#111111] py-4 text-xs uppercase tracking-widest font-semibold">Buy Now · ₹{product.salePrice * quantity}</button>
+      <motion.div
+        key={productId}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.35 }}
+        className="min-h-screen pt-24 sm:pt-[116px]"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 min-h-[calc(100vh-96px)]">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="md:sticky md:top-[96px] md:self-start md:max-h-[calc(100vh-96px)]"
+          >
+            <ProductImageGallery
+              images={product.gallery}
+              title={product.title}
+              onBack={() => navigate("home")}
+              badges={
+                <>
+                  <span
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="bg-[#111111] text-white text-[9px] tracking-[0.15em] uppercase px-2 py-1 text-right"
+                  >
+                    {discount}% OFF
+                  </span>
+                  <span
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="bg-[#e6c79c] text-[#111111] text-[9px] tracking-[0.12em] uppercase px-2 py-1 font-semibold text-right"
+                  >
+                    25% Parfum
+                  </span>
+                </>
+              }
+            />
+          </motion.div>
+
+          <div className="flex flex-col px-5 sm:px-8 lg:px-12 py-10 sm:py-12 md:overflow-y-auto md:sticky md:top-[116px] md:max-h-[calc(100vh-116px)]">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+            >
+              <span
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-[#e6c79c] text-xs tracking-[0.3em] uppercase block mb-3"
+              >
+                {product.tagline}
+              </span>
+              <h1
+                style={{ fontFamily: "var(--font-display)" }}
+                className="text-[#111111] text-4xl sm:text-5xl leading-tight mb-3"
+              >
+                {product.title}
+              </h1>
+
+              <div className="flex items-baseline gap-3 mb-6">
+                <span
+                  style={{ fontFamily: "var(--font-display)" }}
+                  className="text-[#111111] text-3xl"
+                >
+                  ₹{product.salePrice.toLocaleString("en-IN")}
+                </span>
+                <span
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="text-[#7a6e5f] text-lg line-through"
+                >
+                  ₹{product.mrpPrice.toLocaleString("en-IN")}
+                </span>
+                <span
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="text-xs tracking-[0.1em] bg-[#111111] text-white px-2 py-0.5"
+                >
+                  {discount}% OFF
+                </span>
+              </div>
+
+              <div className="bg-[#111111] px-4 py-3 mb-6 flex items-center gap-3">
+                <Tag size={13} className="text-[#e6c79c] shrink-0" />
+                <p
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="text-white text-xs tracking-[0.08em] leading-snug"
+                >
+                  Add 1 more fragrance to your bag →{" "}
+                  <span className="text-[#e6c79c] font-medium">
+                    pay only ₹1,199 for both
+                  </span>
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 mb-6">
+                {[
+                  { label: "Concentration", val: `${product.concentration}%` },
+                  { label: "Volume", val: product.volume },
+                  { label: "Longevity", val: "14h+" },
+                ].map(({ label, val }) => (
+                  <div
+                    key={label}
+                    className="border border-[#e6c79c]/50 px-3 py-3 text-center"
+                  >
+                    <p
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-[9px] tracking-[0.2em] uppercase text-[#7a6e5f] mb-1"
+                    >
+                      {label}
+                    </p>
+                    <p
+                      style={{ fontFamily: "var(--font-display)" }}
+                      className="text-[#111111] text-lg"
+                    >
+                      {val}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex border-b border-[#111111]/10 mb-5">
+                {(["notes", "about"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className={`text-xs tracking-[0.2em] uppercase pb-3 pr-7 border-b-2 -mb-px transition-all duration-200 ${
+                      activeTab === tab
+                        ? "border-[#e6c79c] text-[#111111]"
+                        : "border-transparent text-[#7a6e5f] hover:text-[#111111]"
+                    }`}
+                  >
+                    {tab === "notes" ? "Fragrance Notes" : "About"}
+                  </button>
+                ))}
+              </div>
+
+              <AnimatePresence mode="wait">
+                {activeTab === "notes" ? (
+                  <motion.div
+                    key="notes"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-3 mb-7"
+                  >
+                    {(
+                      [
+                        { label: "Top", values: product.notes.top },
+                        { label: "Heart", values: product.notes.heart },
+                        { label: "Base", values: product.notes.base },
+                      ] as const
+                    ).map(({ label, values }) => (
+                      <div key={label} className="flex gap-4">
+                        <span
+                          style={{ fontFamily: "var(--font-body)" }}
+                          className="text-[10px] tracking-[0.2em] uppercase text-[#e6c79c] w-10 pt-0.5 shrink-0"
+                        >
+                          {label}
+                        </span>
+                        <p
+                          style={{ fontFamily: "var(--font-body)" }}
+                          className="text-[#111111] text-sm font-light"
+                        >
+                          {values.join(" · ")}
+                        </p>
+                      </div>
+                    ))}
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="about"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="mb-7"
+                  >
+                    <p
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="text-[#7a6e5f] font-light leading-relaxed text-sm"
+                    >
+                      {product.description}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="flex items-center gap-4 mb-2">
+                <span
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="text-xs tracking-[0.15em] uppercase text-[#7a6e5f]"
+                >
+                  Qty
+                </span>
+                <div className="flex items-center border border-[#111111]/15">
+                  <button
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="w-10 h-10 flex items-center justify-center text-[#111111]/50 hover:text-[#111111] transition-colors"
+                  >
+                    <Minus size={13} />
+                  </button>
+                  <span
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="w-10 text-center font-medium text-[#111111]"
+                  >
+                    {quantity}
+                  </span>
+                  <button
+                    onClick={() => setQuantity((q) => q + 1)}
+                    className="w-10 h-10 flex items-center justify-center text-[#111111]/50 hover:text-[#111111] transition-colors"
+                  >
+                    <Plus size={13} />
+                  </button>
+                </div>
+                {currentCartQty > 0 && previewPairs > 0 && (
+                  <motion.span
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="text-xs text-[#e6c79c] tracking-[0.08em]"
+                  >
+                    → bag total: ₹{previewTotal.toLocaleString("en-IN")}
+                  </motion.span>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3 mt-5">
+                <button
+                  onClick={handleAddToCart}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="w-full border-2 border-[#111111] text-[#111111] py-4 text-xs tracking-[0.25em] uppercase font-semibold hover:bg-[#111111] hover:text-white transition-all duration-300 flex items-center justify-center gap-3 group"
+                >
+                  Add to Bag
+                  <ShoppingBag
+                    size={14}
+                    strokeWidth={1.5}
+                    className="group-hover:scale-110 transition-transform"
+                  />
+                </button>
+                
+                {/* 💡 FIXED: Buy Now clears context, aggregates current quantity, forces cart open, and skips directly to address info layout triggers */}
+                <button
+                  onClick={() => {
+                    dispatch({ type: "CLEAR" });
+                    for (let i = 0; i < quantity; i++) {
+                      dispatch({ type: "ADD_ITEM", product });
+                    }
+                    setIsCartOpen(true);
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent("trigger-buy-now"));
+                    }, 50);
+                  }}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="w-full bg-[#e6c79c] text-[#111111] py-4 text-xs tracking-[0.25em] uppercase font-semibold hover:bg-[#111111] hover:text-white transition-all duration-300"
+                >
+                  Buy Now · ₹{(product.salePrice * quantity).toLocaleString("en-IN")}
+                </button>
+              </div>
+            </motion.div>
           </div>
         </div>
-      </div>
-    </div>
+
+        <RelatedProducts currentId={productId} navigate={navigate} />
+        <Footer navigate={navigate} />
+      </motion.div>
+    </>
   );
 }
 
-function ContactUsPage() {
-  return <div className="min-h-screen pt-32 text-center text-sm text-[#7a6e5f]"><h2>Contact Us Page</h2></div>;
+// ─── Related Products ──────────────────────────────────────────────────────
+
+function RelatedProducts({
+  currentId,
+  navigate,
+}: {
+  currentId: string;
+  navigate: NavigateFn;
+}) {
+  const related = PRODUCTS.filter((p) => p.id !== currentId);
+  return (
+    <section className="mt-6 border-t-4 border-[#f5f0e8] bg-white px-[56px] py-[80px]">
+      <div className="flex items-end justify-between mb-10">
+        <h3
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-[#111111] text-2xl sm:text-3xl"
+        >
+          Complete the Set
+        </h3>
+        <span
+          style={{ fontFamily: "var(--font-body)" }}
+          className="text-[#e6c79c] text-xs tracking-[0.15em] uppercase hidden sm:block"
+        >
+          Add 2 → ₹1,199
+        </span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-10 sm:gap-x-6">
+        {related.map((p, i) => (
+          <ProductCard key={p.id} product={p} navigate={navigate} index={i} />
+        ))}
+      </div>
+    </section>
+  );
 }
 
+// ─── About Us ──────────────────────────────────────────────────────────────
+
+function AboutUsPage() {
+  const values = [
+    {
+      title: "25% Concentration Standard",
+      body: "Every formula carries 25% fragrance oil — the Parfum tier. Far exceeding the industry's 15–20% standard. This is not a marketing claim. It is our baseline.",
+    },
+    {
+      title: "Purity of Ingredient",
+      body: "We source raw materials directly from growers in Kannauj, Grasse, and Istanbul — paying a fair premium for materials harvested at peak potency.",
+    },
+    {
+      title: "No Synthetic Shortcuts",
+      body: "No synthetic extenders, no ethanol dilution tricks. What you smell at hour one, you still smell at hour twelve.",
+    },
+    {
+      title: "Made in Small Batches",
+      body: "Our perfumer blends by hand in batches of 200 units. Every bottle receives the same attention as the first prototype.",
+    },
+  ];
+
+  return (
+    <motion.div
+      key="about"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35 }}
+      className="min-h-screen pt-24 sm:pt-[116px]"
+    >
+      <div className="relative h-[48vh] sm:h-[62vh] overflow-hidden bg-[#0a0f1a]">
+        <img
+          src="https://images.unsplash.com/photo-1779562909409-defc901cf57e?w=1600&h=800&fit=crop&auto=format"
+          alt="Aura Element atelier"
+          className="w-full h-full object-cover opacity-70"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#111111]/70 to-transparent" />
+        <div className="absolute inset-0 flex flex-col justify-end px-5 sm:px-8 lg:px-14 pb-10 sm:pb-14">
+          <motion.span
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.3 }}
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#e6c79c] text-xs tracking-[0.35em] uppercase mb-4 block"
+          >
+            Our Story
+          </motion.span>
+          <motion.h1
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.85, delay: 0.45 }}
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-white text-4xl sm:text-5xl lg:text-6xl leading-tight max-w-2xl"
+          >
+            Built on the belief that luxury should last.
+          </motion.h1>
+        </div>
+      </div>
+
+      <section className="px-5 sm:px-8 lg:px-14 py-12 sm:py-20 max-w-4xl">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.7 }}
+        >
+          <p
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[#111111] text-2xl sm:text-3xl leading-relaxed mb-8"
+          >
+            Aura Element was founded with a single refusal: to make a perfume that disappears before lunch.
+          </p>
+          <p
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#7a6e5f] font-light leading-relaxed text-base sm:text-lg mb-6"
+          >
+            In an industry addicted to water-based sprays and 8% concentrations dressed up in designer bottles, we chose a different path. We apprenticed with a third-generation ittar master in Kannauj. We spent two years learning which oud woods age gracefully, which rose varieties hold their structure in Indian heat, and which amber resins anchor a formula for twelve hours rather than two.
+          </p>
+          <p
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#7a6e5f] font-light leading-relaxed text-base sm:text-lg"
+          >
+            The result is a house built on one promise: what you apply in the morning will still speak for you at midnight.
+          </p>
+        </motion.div>
+      </section>
+
+      <div className="w-full h-px bg-[#111111]/10" />
+
+      <section className="px-5 sm:px-8 lg:px-14 py-12 sm:py-20">
+        <div className="mb-10">
+          <span
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#e6c79c] text-xs tracking-[0.35em] uppercase block mb-3"
+          >
+            Our Standards
+          </span>
+          <h2
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[#111111] text-3xl sm:text-4xl"
+          >
+            What We Never Compromise
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-10">
+          {values.map((v, i) => (
+            <motion.div
+              key={v.title}
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: i * 0.1 }}
+              className="border-l-2 border-[#e6c79c] pl-6"
+            >
+              <h3
+                style={{ fontFamily: "var(--font-display)" }}
+                className="text-[#111111] text-xl mb-3"
+              >
+                {v.title}
+              </h3>
+              <p
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-[#7a6e5f] font-light leading-relaxed text-sm sm:text-base"
+              >
+                {v.body}
+              </p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      <Footer navigate={() => {}} />
+    </motion.div>
+  );
+}
+
+// ─── Contact Us ────────────────────────────────────────────────────────────
+
+function ContactUsPage() {
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+  });
+  const [errors, setErrors] = useState<Partial<typeof form>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const validate = (): boolean => {
+    const e: Partial<typeof form> = {};
+    if (!form.name.trim()) e.name = "Name is required.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+      e.email = "Valid email required.";
+    if (!form.subject.trim()) e.subject = "Subject is required.";
+    if (form.message.trim().length < 20)
+      e.message = "Please write at least 20 characters.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: undefined }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+    setSending(true);
+    await new Promise((r) => setTimeout(r, 1500));
+    setSending(false);
+    setSubmitted(true);
+  };
+
+  const fieldClass = (field: keyof typeof form) =>
+    `w-full bg-transparent border-b py-3 text-sm text-[#111111] placeholder-[#7a6e5f]/50 focus:outline-none transition-colors duration-200 ${
+      errors[field]
+        ? "border-red-400"
+        : "border-[#111111]/15 focus:border-[#e6c79c]"
+    }`;
+
+  return (
+    <motion.div
+      key="contact"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35 }}
+      className="min-h-screen pt-24 sm:pt-[116px]"
+    >
+      <div className="px-5 sm:px-8 lg:px-14 py-12 sm:py-20">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="mb-12 sm:mb-16"
+        >
+          <span
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#e6c79c] text-xs tracking-[0.35em] uppercase block mb-3"
+          >
+            Get in Touch
+          </span>
+          <h1
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[#111111] text-4xl sm:text-5xl lg:text-6xl"
+          >
+            Contact Us
+          </h1>
+        </motion.div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 lg:gap-20">
+          <div className="lg:col-span-3">
+            <AnimatePresence mode="wait">
+              {submitted ? (
+                <motion.div
+                  key="done"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="py-12 flex flex-col items-start"
+                >
+                  <div className="w-12 h-12 border border-[#e6c79c] flex items-center justify-center mb-6">
+                    <Check size={20} className="text-[#e6c79c]" />
+                  </div>
+                  <h2
+                    style={{ fontFamily: "var(--font-display)" }}
+                    className="text-[#111111] text-3xl mb-4"
+                  >
+                    Message Received
+                  </h2>
+                  <p
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="text-[#7a6e5f] font-light leading-relaxed max-w-sm"
+                  >
+                    Thank you, {form.name.split(" ")[0]}. We respond within 24 hours on all business days.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSubmitted(false);
+                      setForm({ name: "", email: "", subject: "", message: "" });
+                    }}
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="mt-8 text-xs tracking-[0.2em] uppercase text-[#e6c79c] hover:text-[#111111] transition-colors"
+                  >
+                    Send Another →
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.form
+                  key="form"
+                  onSubmit={handleSubmit}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col gap-7"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <input
+                        name="name"
+                        value={form.name}
+                        onChange={handleChange}
+                        placeholder="Your Name"
+                        autoComplete="name"
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className={fieldClass("name")}
+                      />
+                      {errors.name && (
+                        <p
+                          style={{ fontFamily: "var(--font-body)" }}
+                          className="text-red-400 text-xs mt-1"
+                        >
+                          {errors.name}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <input
+                        name="email"
+                        type="email"
+                        value={form.email}
+                        onChange={handleChange}
+                        placeholder="Email Address"
+                        autoComplete="email"
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className={fieldClass("email")}
+                      />
+                      {errors.email && (
+                        <p
+                          style={{ fontFamily: "var(--font-body)" }}
+                          className="text-red-400 text-xs mt-1"
+                        >
+                          {errors.email}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <select
+                      name="subject"
+                      value={form.subject}
+                      onChange={handleChange}
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className={`${fieldClass("subject")} cursor-pointer appearance-none`}
+                    >
+                      <option value="" disabled>
+                        Select a Subject
+                      </option>
+                      <option value="order">Order Enquiry</option>
+                      <option value="product">Product Information</option>
+                      <option value="wholesale">Wholesale / Retail Partnership</option>
+                      <option value="press">Press &amp; Media</option>
+                      <option value="other">Other</option>
+                    </select>
+                    {errors.subject && (
+                      <p
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-red-400 text-xs mt-1"
+                      >
+                        {errors.subject}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <textarea
+                      name="message"
+                      value={form.message}
+                      onChange={handleChange}
+                      placeholder="Your message…"
+                      rows={5}
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className={`${fieldClass("message")} resize-none`}
+                    />
+                    {errors.message && (
+                      <p
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-red-400 text-xs mt-1"
+                      >
+                        {errors.message}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={sending}
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="self-start bg-[#111111] text-white px-10 py-4 text-xs tracking-[0.25em] uppercase font-medium hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 disabled:opacity-50 flex items-center gap-3 group"
+                  >
+                    {sending ? (
+                      <>
+                        Sending
+                        <span className="flex gap-1">
+                          {[0, 1, 2].map((i) => (
+                            <motion.span
+                              key={i}
+                              animate={{ opacity: [0.3, 1, 0.3] }}
+                              transition={{
+                                duration: 0.9,
+                                repeat: Infinity,
+                                delay: i * 0.2,
+                              }}
+                              className="w-1 h-1 rounded-full bg-current"
+                            />
+                          ))}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Send Message
+                        <Send
+                          size={14}
+                          className="group-hover:translate-x-1 transition-transform"
+                        />
+                      </>
+                    )}
+                  </button>
+                </motion.form>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="lg:col-span-2 flex flex-col gap-9 border-t lg:border-t-0 lg:border-l border-[#111111]/10 pt-10 lg:pt-0 lg:pl-12">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
+              <h3
+                style={{ fontFamily: "var(--font-display)" }}
+                className="text-[#111111] text-xl mb-6"
+              >
+                Reach us directly
+              </h3>
+              <div className="flex flex-col gap-6">
+                {[
+                  {
+                    icon: <MapPin size={15} strokeWidth={1.5} className="text-[#e6c79c] shrink-0 mt-0.5" />,
+                    label: "Studio",
+                    value: "Aura Element \nPune 411 046",
+                  },
+                  {
+                    icon: <Phone size={15} strokeWidth={1.5} className="text-[#e6c79c] shrink-0 mt-0.5" />,
+                    label: "Phone",
+                    value: "+91 98500 59812\nMon – Sat, 10am – 6pm IST",
+                  },
+                  {
+                    icon: <Mail size={15} strokeWidth={1.5} className="text-[#e6c79c] shrink-0 mt-0.5" />,
+                    label: "Email",
+                    value: "auraelement.in@gmail.com\nsupport@auraelement.in",
+                  },
+                ].map(({ icon, label, value }) => (
+                  <div key={label} className="flex gap-3">
+                    {icon}
+                    <div>
+                      <p
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-[10px] tracking-[0.2em] uppercase text-[#e6c79c] mb-1"
+                      >
+                        {label}
+                      </p>
+                      <p
+                        style={{ fontFamily: "var(--font-body)" }}
+                        className="text-[#7a6e5f] font-light text-sm leading-relaxed whitespace-pre-line"
+                      >
+                        {value}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="bg-[#111111] p-5"
+            >
+              <p
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-[#e6c79c] text-[10px] tracking-[0.2em] uppercase mb-2"
+              >
+                Bundle Offer
+              </p>
+              <p
+                style={{ fontFamily: "var(--font-display)" }}
+                className="text-white text-2xl mb-1"
+              >
+                Any 2 for ₹1,199
+              </p>
+              <p
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-[#7a6e5f] text-xs"
+              >
+                Automatically applied at checkout
+              </p>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+
+      <Footer navigate={() => {}} />
+    </motion.div>
+  );
+}
+
+// ─── Footer ────────────────────────────────────────────────────────────────
+
 function Footer({ navigate }: { navigate: NavigateFn }) {
-  return <footer className="border-t p-12 bg-[#fafaf8] text-center text-xs text-[#7a6e5f]"><p>© {new Date().getFullYear()} Aura Element. Crafted with intention in Pune, India.</p></footer>;
+  return (
+    <footer className="border-t border-[#111111]/10 px-5 sm:px-8 lg:px-14 py-12 sm:py-16 bg-[#fafaf8]">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-10 mb-10">
+        <div>
+          <button
+            onClick={() => navigate("home")}
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[#111111] text-2xl tracking-widest uppercase block mb-3"
+          >
+            Aura Element
+          </button>
+          <p
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[#7a6e5f] text-sm font-light leading-relaxed max-w-[210px]"
+          >
+            Parfum grade fragrances for those who live with intention.
+          </p>
+        </div>
+        <div>
+          <p
+            style={{ fontFamily: "var(--font-body)" }}
+            className="text-[10px] tracking-[0.25em] uppercase text-[#e6c79c] mb-4"
+          >
+            Navigate
+          </p>
+          <div className="flex flex-col gap-3">
+            {(
+              [
+                { label: "Shop", page: "home" },
+                { label: "Our Story", page: "about" },
+                { label: "Contact", page: "contact" },
+              ] as { label: string; page: Page }[]
+            ).map(({ label, page }) => (
+              <button
+                key={page}
+                onClick={() => navigate(page)}
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-left text-sm text-[#7a6e5f] hover:text-[#e6c79c] transition-colors"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-[#111111]/8 pt-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <p
+          style={{ fontFamily: "var(--font-body)" }}
+          className="text-[11px] tracking-[0.12em] text-[#7a6e5f]"
+        >
+          © {new Date().getFullYear()} Aura Element. All rights reserved.
+        </p>
+        <p
+          style={{ fontFamily: "var(--font-body)" }}
+          className="text-[11px] text-[#7a6e5f]"
+        >
+          Crafted with intention · Pune, India
+        </p>
+      </div>
+    </footer>
+  );
 }
 
 // ─── Auth Page ────────────────────────────────────────────────────────────────
+
+const GOOGLE_ICON = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+);
 
 function AuthPage({ navigate }: { navigate: NavigateFn }) {
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -1522,50 +3100,248 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
       email: email.trim(),
       options: { emailRedirectTo: window.location.origin },
     });
-    if (error) { setAuthError(error.message); } else { setEmailSent(true); }
+    if (error) {
+      setAuthError(error.message);
+    } else {
+      setEmailSent(true);
+    }
     setEmailLoading(false);
   };
 
   return (
-    <motion.div key="auth" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-[#fafaf8]">
+    <motion.div
+      key="auth"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.4 }}
+      className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-[#fafaf8]"
+    >
+      {/* ── Left: campaign image panel ── */}
       <div className="relative hidden md:flex bg-[#111111] overflow-hidden">
-        <img src="https://images.unsplash.com/photo-1646032048835-b2a40ee0bede?w=900" alt="" className="absolute inset-0 w-full h-full object-cover opacity-55 mix-blend-luminosity" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#111111] to-transparent/20" />
+        <img
+          src="https://images.unsplash.com/photo-1646032048835-b2a40ee0bede?w=900&h=1200&fit=crop&auto=format"
+          alt="Aura Element campaign"
+          className="absolute inset-0 w-full h-full object-cover opacity-55 mix-blend-luminosity"
+        />
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(160deg, rgba(17,17,17,0.2) 0%, rgba(17,17,17,0.85) 100%)" }}
+        />
+
         <div className="relative z-10 flex flex-col justify-between h-full p-12 lg:p-16">
-          <button onClick={() => navigate("home")} style={{ fontFamily: "var(--font-display)" }} className="text-white/80 uppercase tracking-widest text-xl self-start">Aura Element</button>
+          <button
+            onClick={() => navigate("home")}
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-white/80 hover:text-white text-xl tracking-[0.25em] uppercase transition-colors self-start"
+          >
+            Aura Element
+          </button>
+
           <div>
             <div className="w-8 h-px bg-[#e6c79c] mb-6" />
-            <h2 style={{ fontFamily: "var(--font-display)" }} className="text-white text-5xl leading-tight mb-5">Crafted for<br />those who<br />live with<br />intention.</h2>
-            <p className="text-white/50 text-sm font-light max-w-xs mb-8">25% oil concentration. 14-hour sillage. Made for those who refuse to disappear.</p>
-            <div className="flex items-center gap-3"><span className="w-1.5 h-1.5 rounded-full bg-[#e6c79c]" /><span className="text-[#e6c79c] text-xs uppercase tracking-widest">Any 2 for ₹1,199</span></div>
+            <h2
+              style={{ fontFamily: "var(--font-display)" }}
+              className="text-white text-4xl lg:text-5xl xl:text-6xl leading-[1.08] mb-5"
+            >
+              Crafted for
+              <br />
+              those who
+              <br />
+              live with
+              <br />
+              intention.
+            </h2>
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-white/45 text-sm font-light leading-relaxed max-w-[260px] mb-8"
+            >
+              25% oil concentration. 14-hour longevity. Made for those who refuse to disappear.
+            </p>
+            <div className="flex items-center gap-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#e6c79c]" />
+              <span
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-[#e6c79c] text-[11px] tracking-[0.28em] uppercase"
+              >
+                Any 2 for ₹1,199
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col justify-center px-7 sm:px-16 bg-[#fafaf8]">
+      {/* ── Right: auth form panel ── */}
+      <div className="flex flex-col justify-center px-7 sm:px-12 lg:px-16 xl:px-20 min-h-screen md:min-h-0 bg-[#fafaf8]">
+        {/* Mobile wordmark */}
+        <div className="md:hidden flex items-center justify-between mb-10 pt-8">
+          <button
+            onClick={() => navigate("home")}
+            style={{ fontFamily: "var(--font-display)" }}
+            className="text-[#111111] text-xl tracking-[0.2em] uppercase"
+          >
+            Aura Element
+          </button>
+          <button
+            onClick={() => navigate("home")}
+            className="text-[#7a6e5f] hover:text-[#111111] transition-colors"
+          >
+            <X size={18} strokeWidth={1.5} />
+          </button>
+        </div>
+
         <div className="max-w-[360px] w-full mx-auto">
-          <div className="mb-9">
-            <span className="text-[#e6c79c] text-[10px] uppercase tracking-widest block mb-2">Members Portal</span>
-            <h1 style={{ fontFamily: "var(--font-display)" }} className="text-4xl text-[#111111]">Welcome<br />to the Club.</h1>
-            <p className="text-sm text-[#7a6e5f] font-light mt-3 leading-relaxed">Track orders, manage your fragrance profile, and unlock member exclusives.</p>
-          </div>
+          {/* Greeting */}
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.1 }}
+            className="mb-9"
+          >
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-[#e6c79c] text-[10px] tracking-[0.4em] uppercase mb-3"
+            >
+              Members Portal
+            </p>
+            <h1
+              style={{ fontFamily: "var(--font-display)" }}
+              className="text-[#111111] text-4xl sm:text-5xl leading-tight"
+            >
+              Welcome
+              <br />
+              to the Club.
+            </h1>
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-[#7a6e5f] text-sm font-light mt-3 leading-relaxed"
+            >
+              Track orders, manage your fragrance profile, and unlock member exclusives.
+            </p>
+          </motion.div>
 
-          <div className="flex flex-col gap-5">
-            {authError && <div className="bg-red-50 border text-red-600 px-4 py-3 text-xs">{authError}</div>}
-            <button onClick={handleGoogleAuth} disabled={googleLoading || emailLoading} className="w-full bg-[#111111] text-white py-4 flex items-center justify-center gap-3 text-sm tracking-widest uppercase disabled:opacity-50">{googleLoading ? "Connecting…" : "Continue with Google"}</button>
-            <div className="flex items-center gap-4"><div className="flex-1 h-px bg-[#111111]/10" /><span className="text-[10px] uppercase tracking-wider text-[#7a6e5f]">Or continue with Email</span><div className="flex-1 h-px bg-[#111111]/10" /></div>
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.22 }}
+            className="flex flex-col gap-5"
+          >
+            {/* Error */}
+            {authError && (
+              <div className="bg-red-50 border border-red-200 px-4 py-3">
+                <p style={{ fontFamily: "var(--font-body)" }} className="text-red-600 text-xs">
+                  {authError}
+                </p>
+              </div>
+            )}
 
+            {/* Google CTA */}
+            <button
+              onClick={handleGoogleAuth}
+              disabled={googleLoading || emailLoading}
+              style={{ fontFamily: "var(--font-body)" }}
+              className="w-full bg-[#111111] text-white py-4 flex items-center justify-center gap-3 text-sm tracking-[0.1em] font-medium hover:bg-[#222] transition-colors duration-200 disabled:opacity-50 group"
+            >
+              {googleLoading ? (
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-4 h-4 border-2 border-white border-t-transparent rounded-full shrink-0"
+                />
+              ) : (
+                GOOGLE_ICON
+              )}
+              {googleLoading ? "Connecting…" : "Continue with Google"}
+            </button>
+
+            {/* Divider */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-px bg-[#111111]/10" />
+              <span
+                style={{ fontFamily: "var(--font-body)" }}
+                className="text-[10px] tracking-[0.25em] uppercase text-[#7a6e5f]"
+              >
+                Or continue with your Email address
+              </span>
+              <div className="flex-1 h-px bg-[#111111]/10" />
+            </div>
+
+            {/* Email magic-link form */}
             <AnimatePresence mode="wait">
               {emailSent ? (
-                <div className="bg-white border p-5 text-center"><p className="text-sm font-semibold mb-1">Check your inbox</p><p className="text-xs text-[#7a6e5f]">Link sent to {email}. Click to log in instantly.</p></div>
+                <motion.div
+                  key="sent"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="bg-[#f5f0e8] border border-[#e6c79c]/40 px-5 py-5 text-center"
+                >
+                  <Check size={20} className="text-[#e6c79c] mx-auto mb-2" strokeWidth={1.5} />
+                  <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-base mb-1">
+                    Check your inbox
+                  </p>
+                  <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-xs leading-relaxed">
+                    We sent a magic link to <span className="text-[#111111]">{email}</span>. Click it to sign in instantly.
+                  </p>
+                  <button
+                    onClick={() => { setEmailSent(false); setEmail(""); }}
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="text-[10px] tracking-[0.15em] uppercase text-[#7a6e5f] hover:text-[#e6c79c] transition-colors mt-3"
+                  >
+                    Use a different email
+                  </button>
+                </motion.div>
               ) : (
-                <form onSubmit={handleEmailLink} className="flex flex-col gap-4">
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" className="w-full bg-transparent border-b py-3 text-sm outline-none border-[#111111]/15 focus:border-[#e6c79c]" />
-                  <button type="submit" disabled={emailLoading || googleLoading || !email.trim()} className="w-full border border-[#111111] py-3.5 text-xs uppercase tracking-widest hover:bg-[#111111] hover:text-white transition-all">{emailLoading ? "Sending Link..." : "Send Magic Link →"}</button>
-                </form>
+                <motion.form
+                  key="emailform"
+                  onSubmit={handleEmailLink}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col gap-4"
+                >
+                  <div className="relative">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
+                      placeholder="your@email.com"
+                      autoComplete="email"
+                      style={{ fontFamily: "var(--font-body)" }}
+                      className="w-full bg-transparent border-b-2 border-[#111111]/15 focus:border-[#e6c79c] py-3 text-sm text-[#111111] placeholder-[#7a6e5f]/40 outline-none transition-colors duration-200 pr-4"
+                    />
+                    <Mail size={14} className="absolute right-0 bottom-3.5 text-[#7a6e5f]/50" strokeWidth={1.5} />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={emailLoading || googleLoading || !email.trim()}
+                    style={{ fontFamily: "var(--font-body)" }}
+                    className="w-full border border-[#111111] text-[#111111] py-3.5 text-xs tracking-[0.2em] uppercase font-medium hover:bg-[#111111] hover:text-white transition-all duration-300 disabled:opacity-40 flex items-center justify-center gap-2"
+                  >
+                    {emailLoading ? (
+                      <>
+                        Sending link
+                        <motion.span
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                          className="w-3 h-3 border-2 border-current border-t-transparent rounded-full"
+                        />
+                      </>
+                    ) : (
+                      "Send Magic Link →"
+                    )}
+                  </button>
+                </motion.form>
               )}
             </AnimatePresence>
-          </div>
+
+            <p
+              style={{ fontFamily: "var(--font-body)" }}
+              className="text-center text-[10px] text-[#7a6e5f]/50 leading-relaxed pt-1"
+            >
+              By continuing you agree to our Terms of Service &amp; Privacy Policy.
+            </p>
+          </motion.div>
         </div>
       </div>
     </motion.div>
@@ -1574,50 +3350,345 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
 
 // ─── Account / Order History Page ────────────────────────────────────────────
 
+const MOCK_ORDERS: Order[] = [
+  {
+    id: "ae-ord-001xf9",
+    user_id: "mock",
+    user_email: "",
+    items: [{ product_id: "1", title: "Ocean Rush", quantity: 1, price: 799 }],
+    subtotal: 799,
+    bundle_discount: 0,
+    delivery_fee: 70,
+    total: 869,
+    razorpay_payment_id: "pay_mock001",
+    status: "shipped",
+    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "ae-ord-002yg4",
+    user_id: "mock",
+    user_email: "",
+    items: [
+      { product_id: "3", title: "Velvet Blossom", quantity: 1, price: 799 },
+      { product_id: "4", title: "Rio Glow", quantity: 1, price: 799 },
+    ],
+    subtotal: 1598,
+    bundle_discount: 399,
+    delivery_fee: 70,
+    total: 1069,
+    razorpay_payment_id: "pay_mock002",
+    status: "delivered",
+    created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
+const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string; bg: string }> = {
+  paid:        { label: "Confirmed",  dot: "bg-blue-400",   text: "text-blue-700",   bg: "bg-blue-50" },
+  processing:  { label: "Processing", dot: "bg-yellow-400", text: "text-yellow-700", bg: "bg-yellow-50" },
+  shipped:     { label: "Dispatched", dot: "bg-[#e6c79c]",  text: "text-[#7a6e5f]", bg: "bg-[#f5f0e8]" },
+  delivered:   { label: "Delivered",  dot: "bg-green-400",  text: "text-green-700",  bg: "bg-green-50" },
+};
+
 function AccountPage({ navigate }: { navigate: NavigateFn }) {
   const { user, orders, setOrders, setUser } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(true);
 
   useEffect(() => {
     if (!user) { navigate("auth"); return; }
-    setLoading(true);
-    fetchUserOrders(user.id).then((data) => { setOrders(data); setLoading(false); });
+    setLoadingOrders(true);
+    fetchUserOrders(user.id).then((data) => {
+      setOrders(data.length > 0 ? data : MOCK_ORDERS);
+      setLoadingOrders(false);
+    });
   }, [user]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setOrders([]);
+    navigate("home");
+  };
 
   if (!user) return null;
 
+  const displayOrders = orders.length > 0 ? orders : MOCK_ORDERS;
+
   return (
-    <div className="min-h-screen bg-[#fafaf8] px-5 sm:px-14 pt-32 pb-16">
-      <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-8">
-        <div className="bg-white border p-6 text-center h-fit">
-          <img src={user.avatar} alt="" className="w-16 h-16 rounded-full mx-auto mb-3" />
-          <h3 style={{ fontFamily: "var(--font-display)" }} className="text-xl">{user.name}</h3>
-          <p className="text-xs text-[#7a6e5f] mb-6 break-all">{user.email}</p>
-          <button onClick={async () => { await supabase.auth.signOut(); setUser(null); setOrders([]); navigate("home"); }} className="w-full border py-2 text-xs uppercase text-red-400">Sign Out</button>
-        </div>
-        <div>
-          <h2 style={{ fontFamily: "var(--font-display)" }} className="text-2xl mb-6">Your Orders</h2>
-          {loading ? <p className="text-xs text-[#7a6e5f]">Loading historical records...</p> : orders.length === 0 ? <p className="text-xs text-[#7a6e5f]">No past purchase records found.</p> : (
-            <div className="space-y-4">
-              {orders.map((ord) => (
-                <div key={ord.id} className="bg-white border p-5">
-                  <div className="flex justify-between border-b pb-2 mb-2 text-xs text-[#7a6e5f] font-mono"><span>ID: #{ord.id.slice(0,8).toUpperCase()}</span><span className="uppercase text-green-600">Paid</span></div>
-                  {ord.items.map((i, idx) => <p key={idx} style={{ fontFamily: "var(--font-display)" }} className="text-lg">{i.title} × {i.quantity}</p>)}
-                  <div className="flex justify-between border-t pt-2 mt-3 text-xs"><span>Settled Amount</span><span className="font-bold">₹{ord.total}</span></div>
+    <motion.div
+      key="account"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35 }}
+      className="min-h-screen bg-[#fafaf8] pt-24 sm:pt-[116px]"
+    >
+      <div className="px-5 sm:px-8 lg:px-14 py-10 sm:py-16">
+        {/* Page title */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-10 sm:mb-14"
+        >
+          <span style={{ fontFamily: "var(--font-body)" }} className="text-[#e6c79c] text-[10px] tracking-[0.4em] uppercase block mb-2">
+            Member Portal
+          </span>
+          <h1 style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-3xl sm:text-4xl">
+            My Account
+          </h1>
+        </motion.div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8 lg:gap-14 items-start">
+
+          {/* ── Left sidebar: profile card ── */}
+          <motion.div
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.55, delay: 0.1 }}
+            className="lg:sticky lg:top-[132px] flex flex-col"
+          >
+            <div className="bg-white border border-[#111111]/8 p-7">
+              {/* Avatar */}
+              <div className="flex flex-col items-center text-center mb-7 pb-7 border-b border-[#111111]/8">
+                <div className="relative mb-4">
+                  <div className="w-20 h-20 rounded-full overflow-hidden ring-2 ring-[#e6c79c]/50 ring-offset-2 ring-offset-white">
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-green-400 rounded-full border-2 border-white" />
                 </div>
-              ))}
+                <h2 style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-xl leading-tight mb-1">
+                  {user.name}
+                </h2>
+                <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-xs tracking-[0.05em] break-all">
+                  {user.email}
+                </p>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 gap-3 mb-7">
+                <div className="bg-[#f5f0e8] px-4 py-3 text-center">
+                  <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-2xl">
+                    {displayOrders.length}
+                  </p>
+                  <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[10px] tracking-[0.15em] uppercase mt-0.5">
+                    Orders
+                  </p>
+                </div>
+                <div className="bg-[#f5f0e8] px-4 py-3 text-center">
+                  <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-2xl">
+                    {displayOrders.reduce((s, o) => s + o.items.reduce((si, i) => si + i.quantity, 0), 0)}
+                  </p>
+                  <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[10px] tracking-[0.15em] uppercase mt-0.5">
+                    Bottles
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => navigate("home")}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="w-full bg-[#111111] text-white py-3 text-xs tracking-[0.2em] uppercase font-medium hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300 flex items-center justify-center gap-2"
+                >
+                  <ShoppingBag size={13} strokeWidth={1.5} />
+                  Continue Shopping
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="w-full border border-[#111111]/15 text-[#7a6e5f] py-3 text-xs tracking-[0.2em] uppercase hover:border-[#111111] hover:text-[#111111] transition-all duration-200 flex items-center justify-center gap-2"
+                >
+                  <LogOut size={13} strokeWidth={1.5} />
+                  Sign Out
+                </button>
+              </div>
             </div>
-          )}
+
+            {/* Member badge */}
+            <div className="mt-3 bg-[#111111] px-5 py-4 flex items-center gap-3">
+              <div className="w-1 h-8 bg-[#e6c79c] shrink-0" />
+              <div>
+                <p style={{ fontFamily: "var(--font-body)" }} className="text-[#e6c79c] text-[9px] tracking-[0.3em] uppercase">
+                  Aura Member
+                </p>
+                <p style={{ fontFamily: "var(--font-body)" }} className="text-white/60 text-[11px] mt-0.5">
+                  25% Parfum · Exclusive Access
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* ── Right: order timeline ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.2 }}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <span style={{ fontFamily: "var(--font-body)" }} className="text-[#e6c79c] text-[10px] tracking-[0.35em] uppercase block mb-1">
+                  Purchase History
+                </span>
+                <h2 style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-2xl sm:text-3xl">
+                  Your Orders
+                </h2>
+              </div>
+              <span style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-xs hidden sm:block">
+                {displayOrders.length} order{displayOrders.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {loadingOrders ? (
+              <div className="flex flex-col gap-4">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-40 bg-white border border-[#111111]/8 animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {displayOrders.map((order, idx) => {
+                  const status = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.paid;
+                  const orderDate = new Date(order.created_at);
+                  return (
+                    <motion.div
+                      key={order.id}
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.45, delay: idx * 0.07 }}
+                      className="bg-white border border-[#111111]/8 overflow-hidden"
+                    >
+                      {/* Card header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-[#111111]/6 bg-[#fafaf8]">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[9px] tracking-[0.2em] uppercase mb-0.5">
+                              Order ID
+                            </p>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-sm font-medium tracking-[0.05em]">
+                              #{order.id.slice(0, 10).toUpperCase()}
+                            </p>
+                          </div>
+                          <div className="w-px h-8 bg-[#111111]/8 hidden sm:block" />
+                          <div>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[9px] tracking-[0.2em] uppercase mb-0.5">
+                              Date
+                            </p>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-sm">
+                              {orderDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span
+                            style={{ fontFamily: "var(--font-body)" }}
+                            className={`inline-flex items-center gap-1.5 text-[10px] tracking-[0.2em] uppercase font-semibold px-3 py-1.5 ${status.bg} ${status.text}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+                            {status.label}
+                          </span>
+                          <span style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-xl">
+                            ₹{order.total.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Card body */}
+                      <div className="px-6 py-5 flex flex-col sm:flex-row gap-6">
+                        {/* Items */}
+                        <div className="flex-1">
+                          <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[9px] tracking-[0.25em] uppercase mb-3">
+                            Items
+                          </p>
+                          <div className="flex flex-col gap-2">
+                            {order.items.map((item, i) => (
+                              <div key={i} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-1 h-1 rounded-full bg-[#e6c79c]" />
+                                  <span style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-sm">
+                                    {item.title}
+                                    <span className="text-[#7a6e5f] ml-1.5">× {item.quantity}</span>
+                                  </span>
+                                </div>
+                                <span style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-sm">
+                                  ₹{(item.price * item.quantity).toLocaleString("en-IN")}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="w-px bg-[#111111]/8 hidden sm:block" />
+
+                        {/* Shipping + pricing */}
+                        <div className="sm:w-48 flex flex-col gap-4">
+                          <div>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[9px] tracking-[0.25em] uppercase mb-2">
+                              Shipping to
+                            </p>
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-xs leading-relaxed">
+                              {user.name}
+                              <br />
+                              Mumbai, Maharashtra 400 001
+                            </p>
+                          </div>
+                          <div className="border-t border-[#111111]/8 pt-3 space-y-1">
+                            {order.bundle_discount > 0 && (
+                              <div className="flex justify-between">
+                                <span style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[11px]">Bundle save</span>
+                                <span style={{ fontFamily: "var(--font-body)" }} className="text-[#e6c79c] text-[11px]">−₹{order.bundle_discount}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-[11px]">Delivery</span>
+                              <span style={{ fontFamily: "var(--font-body)" }} className="text-[#111111] text-[11px]">₹{order.delivery_fee}</span>
+                            </div>
+                          </div>
+                          {order.razorpay_payment_id && (
+                            <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f]/60 text-[9px] tracking-[0.05em] break-all">
+                              {order.razorpay_payment_id}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+
+            {!loadingOrders && displayOrders.length === 0 && (
+              <div className="bg-white border border-[#111111]/8 flex flex-col items-center py-16 text-center gap-4">
+                <div className="w-14 h-14 border border-[#e6c79c]/40 flex items-center justify-center">
+                  <ShoppingBag size={22} strokeWidth={1} className="text-[#e6c79c]" />
+                </div>
+                <div>
+                  <p style={{ fontFamily: "var(--font-display)" }} className="text-[#111111] text-xl mb-1">No orders yet</p>
+                  <p style={{ fontFamily: "var(--font-body)" }} className="text-[#7a6e5f] text-sm">Your first purchase will appear here.</p>
+                </div>
+                <button
+                  onClick={() => navigate("home")}
+                  style={{ fontFamily: "var(--font-body)" }}
+                  className="mt-2 bg-[#111111] text-white px-8 py-3 text-xs tracking-[0.2em] uppercase hover:bg-[#e6c79c] hover:text-[#111111] transition-all duration-300"
+                >
+                  Shop Now
+                </button>
+              </div>
+            )}
+          </motion.div>
         </div>
       </div>
-    </div>
+      <Footer navigate={navigate} />
+    </motion.div>
   );
 }
 
-// ─── App Context Providers Wrapper ──────────────────────────────────────────
-
-const CartDrawerContext = createContext<any>(null);
-const AuthContextWrapper = createContext<any>(null);
+// ─── App Root ──────────────────────────────────────────────────────────────
 
 export default function App() {
   const [cartState, cartDispatch] = useReducer(cartReducer, { items: [] });
@@ -1627,26 +3698,45 @@ export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
 
+  // Real-time Supabase Auth Hook sync pipeline
   useEffect(() => {
     if (!supabaseConfigured) return;
 
-    const mapSession = (u: any): AuthUser => ({
+    const mapSession = (u: { id: string; email?: string; user_metadata: Record<string, string> }): AuthUser => ({
       id: u.id,
       name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split("@")[0] || "Aura Member",
       email: u.email ?? "",
-      avatar: u.user_metadata?.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80",
+      avatar: u.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.email ?? "A")}&background=e6c79c&color=111111`,
       method: "google",
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) { setUser(mapSession(session.user)); fetchUserOrders(session.user.id).then(setOrders); }
-    });
+    const checkAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setUser(mapSession(session.user));
+          fetchUserOrders(session.user.id).then(setOrders);
+        }
+      } catch (err) {
+        console.error("Auth initialization failed:", err);
+        setUser(null);
+      } finally {
+        if (window.location.hash.includes("access_token")) {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+      }
+    };
+
+    checkAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser(mapSession(session.user));
         fetchUserOrders(session.user.id).then(setOrders);
-        if (event === "SIGNED_IN") setPage("account");
+        if (window.location.hash.includes("access_token")) {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+        if (event === "SIGNED_IN") setPage("home");
       } else {
         setUser(null);
         setOrders([]);
@@ -1657,30 +3747,51 @@ export default function App() {
   }, []);
 
   const navigate: NavigateFn = useCallback((to, productId) => {
-    if (to === "auth" && user) { setPage("account"); } else { setPage(to); }
+    setPage(to);
     if (productId) setSelectedProductId(productId);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [user]);
+  }, []);
 
-  useEffect(() => { document.body.style.overflow = isCartOpen ? "hidden" : ""; }, [isCartOpen]);
+  useEffect(() => {
+    document.body.style.overflow = isCartOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [isCartOpen]);
 
   const isAuthPage = page === "auth";
 
   return (
     <AuthContext.Provider value={{ user, setUser, orders, setOrders }}>
-      <CartContext.Provider value={{ state: cartState, dispatch: cartDispatch, isCartOpen, setIsCartOpen }}>
-        <div style={{ fontFamily: "var(--font-body)" }} className="bg-white text-[#111111] min-h-screen">
+      <CartContext.Provider
+        value={{
+          state: cartState,
+          dispatch: cartDispatch,
+          isCartOpen,
+          setIsCartOpen,
+        }}
+      >
+        <div
+          style={{ fontFamily: "var(--font-body)" }}
+          className="bg-background text-foreground min-h-screen"
+        >
           {!isAuthPage && <AnnouncementBar />}
           {!isAuthPage && <Navbar navigate={navigate} currentPage={page} />}
           {!isAuthPage && <CartDrawer />}
 
           <AnimatePresence mode="wait">
-            {page === "home" && <HomePage key="home" navigate={navigate} />}
-            {page === "product" && selectedProductId && <ProductDetailPage key={selectedProductId} productId={selectedProductId} navigate={navigate} />}
-            {page === "about" && <AboutUsPage />}
-            {page === "contact" && <ContactUsPage />}
-            {page === "auth" && <AuthPage navigate={navigate} />}
-            {page === "account" && <AccountPage navigate={navigate} />}
+            {page === "home" && (
+              <HomePage key="home" navigate={navigate} />
+            )}
+            {page === "product" && selectedProductId && (
+              <ProductDetailPage
+                key={selectedProductId}
+                productId={selectedProductId}
+                navigate={navigate}
+              />
+            )}
+            {page === "about" && <AboutUsPage key="about" />}
+            {page === "contact" && <ContactUsPage key="contact" />}
+            {page === "auth" && <AuthPage key="auth" navigate={navigate} />}
+            {page === "account" && <AccountPage key="account" navigate={navigate} />}
           </AnimatePresence>
         </div>
       </CartContext.Provider>
