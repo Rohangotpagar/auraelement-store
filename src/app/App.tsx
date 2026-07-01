@@ -3708,22 +3708,25 @@ export default function App() {
 
   // Real-time Supabase Auth Hook sync pipeline
 useEffect(() => {
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    if (session) {
-      const u = session.user;
+supabase.auth.getSession().then(({ data: { session } }) => {
 
-      setUser({
-        id: u.id,
-        name:
-          u.user_metadata.full_name ||
-          u.user_metadata.name ||
-          "User",
-        email: u.email ?? "",
-        avatar: u.user_metadata.avatar_url ?? "",
-        method: "google",
-      });
-    }
-  });
+  console.log("SESSION", session);
+
+  if (session) {
+    const u = session.user;
+
+    setUser({
+      id: u.id,
+      name:
+        u.user_metadata.full_name ||
+        u.user_metadata.name ||
+        "User",
+      email: u.email ?? "",
+      avatar: u.user_metadata.avatar_url ?? "",
+      method: "google",
+    });
+  }
+});
 
   const {
     data: { subscription },
