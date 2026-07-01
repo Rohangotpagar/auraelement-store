@@ -1507,7 +1507,7 @@ function HeroSection({ navigate }: { navigate: NavigateFn }) {
         />
         <span
           style={{ fontFamily: "var(--font-body)" }}
-          className="text-white/30 text-[9px] tracking-[0.3em] uppercase writing-mode-vertical rotate-180"
+          className="text-white/30 text-[9px] tracking-[0.3em] uppercase writing-mode-vertical"
         >
           Scroll
         </span>
