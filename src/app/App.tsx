@@ -3089,10 +3089,15 @@ function AuthPage({ navigate }: { navigate: NavigateFn }) {
   const handleGoogleAuth = async () => {
     setAuthError(null);
     setGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+  provider: "google",
+  options: {
+    redirectTo: `${window.location.origin}/`,
+  },
+});
+
+console.log("OAuth Data:", data);
+console.log("OAuth Error:", error);
     if (error) { setAuthError(error.message); setGoogleLoading(false); }
   };
 
