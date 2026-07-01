@@ -3699,52 +3699,47 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
 
   // Real-time Supabase Auth Hook sync pipeline
-  useEffect(() => {
-    if (!supabaseConfigured) return;
+useEffect(() => {
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+      const u = session.user;
 
-    const mapSession = (u: { id: string; email?: string; user_metadata: Record<string, string> }): AuthUser => ({
-      id: u.id,
-      name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split("@")[0] || "Aura Member",
-      email: u.email ?? "",
-      avatar: u.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.email ?? "A")}&background=e6c79c&color=111111`,
-      method: "google",
-    });
+      setUser({
+        id: u.id,
+        name:
+          u.user_metadata.full_name ||
+          u.user_metadata.name ||
+          "User",
+        email: u.email ?? "",
+        avatar: u.user_metadata.avatar_url ?? "",
+        method: "google",
+      });
+    }
+  });
 
-    const checkAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          setUser(mapSession(session.user));
-          fetchUserOrders(session.user.id).then(setOrders);
-        }
-      } catch (err) {
-        console.error("Auth initialization failed:", err);
-        setUser(null);
-      } finally {
-        if (window.location.hash.includes("access_token")) {
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
-        }
-      }
-    };
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (session) {
+      const u = session.user;
 
-    checkAuth();
+      setUser({
+        id: u.id,
+        name:
+          u.user_metadata.full_name ||
+          u.user_metadata.name ||
+          "User",
+        email: u.email ?? "",
+        avatar: u.user_metadata.avatar_url ?? "",
+        method: "google",
+      });
+    } else {
+      setUser(null);
+    }
+  });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        setUser(mapSession(session.user));
-        fetchUserOrders(session.user.id).then(setOrders);
-        if (window.location.hash.includes("access_token")) {
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
-        }
-        if (event === "SIGNED_IN") setPage("home");
-      } else {
-        setUser(null);
-        setOrders([]);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  return () => subscription.unsubscribe();
+}, []);
 
   const navigate: NavigateFn = useCallback((to, productId) => {
     setPage(to);
